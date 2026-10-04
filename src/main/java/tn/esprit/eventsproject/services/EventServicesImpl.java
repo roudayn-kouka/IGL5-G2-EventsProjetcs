@@ -117,4 +117,25 @@ public class EventServicesImpl implements IEventServices{
         }
     }
 
+    @Override
+    public Event addEvent(Event event) {
+        return eventRepository.save(event);
+    }
+
+    @Override
+    public Event retrieveEvent(int idEvent) {
+        return eventRepository.findById(idEvent).orElse(null);
+    }
+
+    @Override
+    public Event updateEvent(Event event) {
+        return eventRepository.save(event);
+    }
+
+    @Override
+    public void deleteEvent(int idEvent) {
+        eventRepository.deleteById(idEvent);
+    }
+
+
 }
