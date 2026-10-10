@@ -8,6 +8,10 @@ import java.time.LocalDate;
 import java.util.List;
 
 public interface IEventServices {
+    Event addEvent(Event event);
+    Event retrieveEvent(int idEvent);
+    Event updateEvent(Event event);
+    void deleteEvent(int idEvent);
     public Participant addParticipant(Participant participant);
     public Event addAffectEvenParticipant(Event event, int idParticipant);
     public Event addAffectEvenParticipant(Event event);
