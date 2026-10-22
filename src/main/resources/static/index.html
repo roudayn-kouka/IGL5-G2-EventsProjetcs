@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Événements FST · Tableau de bord</title>
+<link rel="icon" href="img/logo-fst.jpg">
+<style>
+  :root {
+    --fst-blue: #000098;
+    --fst-blue-2: #1f2fb8;
+    --fst-blue-soft: #e9ebfb;
+    --fst-yellow: #ccce01;
+    --fst-yellow-soft: #f6f7c9;
+    --ink: #10132b;
+    --ink-2: #4a4f6e;
+    --ink-3: #8a8fa8;
+    --line: #e4e6f0;
+    --bg: #f4f5fa;
+    --card: #ffffff;
+    --ok: #12805c;
+    --ok-soft: #e3f4ec;
+    --warn: #a15c00;
+    --warn-soft: #fdf0dc;
+    --danger: #b42318;
+    --radius: 14px;
+    --shadow: 0 1px 2px rgba(16,19,43,.06), 0 4px 16px rgba(16,19,43,.05);
+    --font: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+  button, input, select { font: inherit; color: inherit; }
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- En-tête ---------- */
+  .topbar { background: #fff; border-bottom: 1px solid var(--line); }
+  .topbar .wrap { display: flex; align-items: center; gap: 18px; height: 78px; }
+  .topbar img { height: 58px; width: auto; display: block; }
+  .brand { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+  .brand strong { font-size: 17px; color: var(--fst-blue); letter-spacing: .2px; }
+  .brand span { font-size: 13px; color: var(--ink-2); }
+  .topbar .spacer { flex: 1; }
+  .status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); }
+  .dot.on { background: #22a06b; box-shadow: 0 0 0 3px #22a06b22; }
+  .dot.off { background: var(--danger); box-shadow: 0 0 0 3px #b4231822; }
+
+  .hero { background: var(--fst-blue); color: #fff; position: relative; overflow: hidden; }
+  .hero::after { /* rayures du logo FST */
+    content: ""; position: absolute; inset: 0 0 0 auto; width: 46%;
+    background: repeating-linear-gradient(180deg, var(--fst-yellow) 0 7px, transparent 7px 14px);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 60%);
+            mask-image: linear-gradient(90deg, transparent, #000 60%);
+    opacity: .9; pointer-events: none;
+  }
+  .hero .wrap { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 30px; padding-bottom: 84px; flex-wrap: wrap; }
+  .hero h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -.3px; }
+  .hero p { margin: 4px 0 0; color: #c9ccf5; font-size: 14px; }
+  .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .btn { display: inline-flex; align-items: center; gap: 8px; border: 1px solid transparent; border-radius: 10px; padding: 9px 16px; font-weight: 600; font-size: 14px; cursor: pointer; transition: transform .08s ease, background .15s ease, box-shadow .15s ease; }
+  .btn:active { transform: translateY(1px); }
+  .btn-yellow { background: var(--fst-yellow); color: #1b1c00; }
+  .btn-yellow:hover { background: #dadc12; }
+  .btn-ghost { background: var(--fst-blue); color: #fff; border-color: rgba(255,255,255,.55); }
+  .btn-ghost:hover { background: var(--fst-blue-2); }
+  .btn-blue { background: var(--fst-blue); color: #fff; }
+  .btn-blue:hover { background: var(--fst-blue-2); }
+  .btn-light { background: #fff; border-color: var(--line); color: var(--ink); }
+  .btn-light:hover { border-color: #c8cbe0; }
+  .btn svg { width: 16px; height: 16px; }
+
+  main { padding: 26px 0 48px; }
+
+  /* ---------- KPI ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 16px; margin-top: -54px; position: relative; z-index: 2; }
+  .kpi { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px 18px 16px; border-top: 4px solid var(--fst-blue); min-width: 0; }
+  .kpi:nth-child(2) { border-top-color: var(--fst-yellow); }
+  .kpi:nth-child(4) { border-top-color: var(--fst-yellow); }
+  .kpi .label { font-size: 12.5px; color: var(--ink-2); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+  .kpi .value { font-size: 30px; font-weight: 750; letter-spacing: -.5px; margin-top: 6px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpi .value small { font-size: 15px; color: var(--ink-2); font-weight: 600; margin-left: 4px; }
+  .kpi .sub { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+  .bar { height: 6px; background: var(--fst-blue-soft); border-radius: 99px; margin-top: 10px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--fst-blue); border-radius: 99px; width: 0; transition: width .6s ease; }
+
+  /* ---------- Grilles et cartes ---------- */
+  .grid { display: grid; gap: 16px; margin-top: 16px; }
+  .g-2-1 { grid-template-columns: 2fr 1fr; }
+  .g-1-2 { grid-template-columns: 1fr 2fr; }
+  .card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; min-width: 0; }
+  .card-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .card-h h2 { margin: 0; font-size: 16px; font-weight: 700; }
+  .card-h .hint { font-size: 12.5px; color: var(--ink-3); }
+  .chart-box { position: relative; height: 290px; }
+  .chart-box.sm { height: 250px; }
+
+  /* ---------- À venir ---------- */
+  .timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; max-height: 300px; overflow: auto; }
+  .tl { display: grid; grid-template-columns: 56px 1fr; gap: 12px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 12px; }
+  .tl .date { background: var(--fst-blue); color: #fff; border-radius: 10px; text-align: center; padding: 6px 0; line-height: 1.1; }
+  .tl .date b { display: block; font-size: 20px; }
+  .tl .date span { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #c9ccf5; }
+  .tl .title { font-weight: 650; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tl .meta { font-size: 12.5px; color: var(--ink-2); display: flex; gap: 10px; flex-wrap: wrap; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .pill.blue { background: var(--fst-blue-soft); color: var(--fst-blue); }
+  .pill.yellow { background: var(--fst-yellow-soft); color: #5d5e00; }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.grey { background: #eef0f5; color: var(--ink-2); }
+
+  /* ---------- Tableaux ---------- */
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+  input[type=text], input[type=date], input[type=number], select {
+    border: 1px solid var(--line); background: #fff; border-radius: 9px; padding: 8px 10px; min-width: 0; outline: none; transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus, select:focus { border-color: var(--fst-blue); box-shadow: 0 0 0 3px #00009822; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { background: #f8f9fc; font-size: 12px; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-2); font-weight: 650; position: sticky; top: 0; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: #fafbff; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .empty { padding: 28px; text-align: center; color: var(--ink-3); }
+  .mini-bar { display: inline-block; vertical-align: middle; width: 70px; height: 6px; border-radius: 99px; background: var(--fst-blue-soft); margin-left: 8px; overflow: hidden; }
+  .mini-bar i { display: block; height: 100%; background: var(--fst-yellow); }
+
+  .tabs { display: inline-flex; background: #eef0f6; border-radius: 10px; padding: 3px; gap: 2px; }
+  .tabs button { border: 0; background: transparent; padding: 6px 14px; border-radius: 8px; font-weight: 600; font-size: 13.5px; color: var(--ink-2); cursor: pointer; }
+  .tabs button.active { background: #fff; color: var(--fst-blue); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+  select.inline { padding: 4px 8px; font-size: 13px; }
+
+  /* ---------- Modale ---------- */
+  .overlay { position: fixed; inset: 0; background: rgba(10,12,40,.45); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 50; }
+  .overlay.open { display: flex; }
+  .modal { background: #fff; width: 100%; max-width: 560px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.25); overflow: hidden; max-height: calc(100vh - 32px); display: flex; flex-direction: column; }
+  .modal-h { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+  .modal-h h3 { margin: 0; font-size: 17px; }
+  .modal-b { padding: 18px 20px; overflow: auto; }
+  .modal-f { padding: 14px 20px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; }
+  .close { border: 0; background: transparent; font-size: 22px; cursor: pointer; color: var(--ink-3); line-height: 1; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  .form-grid .full { grid-column: 1 / -1; }
+  .form-grid > * { min-width: 0; }
+  .form-grid input:not([type=checkbox]), .form-grid select { width: 100%; }
+  .checklist { border: 1px solid var(--line); border-radius: 10px; max-height: 170px; overflow: auto; padding: 6px; }
+  .checklist label { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 7px; font-size: 14px; font-weight: 500; color: var(--ink); cursor: pointer; }
+  .checklist label:hover { background: #f5f6fb; }
+  .switch { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--ink); }
+
+  /* ---------- Toast & bannière ---------- */
+  .toast { position: fixed; right: 20px; bottom: 20px; background: var(--ink); color: #fff; padding: 12px 16px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.2); font-size: 14px; opacity: 0; transform: translateY(10px); transition: all .25s ease; z-index: 60; max-width: 360px; }
+  .toast.show { opacity: 1; transform: none; }
+  .toast.err { background: var(--danger); }
+  .banner { display: none; margin-top: 16px; background: #fff4f2; border: 1px solid #f5c2bc; color: var(--danger); padding: 12px 16px; border-radius: 12px; font-size: 14px; }
+  .banner.show { display: block; }
+
+  footer { text-align: center; color: var(--ink-3); font-size: 12.5px; padding: 8px 0 30px; }
+  footer i { display: block; height: 4px; width: 80px; margin: 0 auto 12px; background: repeating-linear-gradient(90deg, var(--fst-blue) 0 20px, var(--fst-yellow) 20px 40px); border-radius: 99px; }
+
+  .skeleton { color: transparent !important; background: linear-gradient(90deg, #eef0f6 25%, #f7f8fb 50%, #eef0f6 75%); background-size: 200% 100%; animation: sk 1.2s infinite; border-radius: 8px; }
+  @keyframes sk { to { background-position: -200% 0; } }
+
+  @media (max-width: 1100px) {
+    .kpis { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    .g-2-1, .g-1-2 { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 640px) {
+    .wrap { padding: 0 16px; }
+    .topbar .wrap { height: 66px; gap: 12px; }
+    .topbar img { height: 44px; }
+    .brand strong { font-size: 15px; }
+    .brand span, .status .txt { display: none; }
+    .hero h1 { font-size: 22px; }
+    .hero .wrap { padding-bottom: 66px; }
+    .hero::after { width: 70%; opacity: .45; }
+    .kpis { grid-template-columns: repeat(2, minmax(0,1fr)); margin-top: -40px; }
+    .kpi .value { font-size: 24px; }
+    .form-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <img src="img/logo-fst.jpg" alt="Faculté des Sciences de Tunis">
+    <div class="brand">
+      <strong>Faculté des Sciences de Tunis</strong>
+      <span>Université de Tunis El Manar · Gestion des événements</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="status" title="État de l'API"><span class="dot" id="apiDot"></span><span class="txt" id="apiTxt">Connexion…</span></div>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <h1>Tableau de bord des événements</h1>
+      <p id="today">—</p>
+    </div>
+    <div class="hero-actions">
+      <button class="btn btn-ghost" id="btnRefresh" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+        Actualiser
+      </button>
+      <button class="btn btn-yellow" id="btnAdd" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        Ajouter
+      </button>
+    </div>
+  </div>
+</section>
+
+<main>
+  <div class="wrap">
+    <section class="kpis" aria-label="Indicateurs clés">
+      <div class="kpi"><div class="label">Événements</div><div class="value skeleton" id="kEvents">00</div><div class="sub" id="kEventsSub">&nbsp;</div></div>
+      <div class="kpi"><div class="label">À venir</div><div class="value skeleton" id="kUpcoming">00</div><div class="sub" id="kUpcomingSub">&nbsp;</div></div>
+      <div class="kpi"><div class="label">Participants</div><div class="value skeleton" id="kPart">00</div><div class="sub" id="kPartSub">&nbsp;</div></div>
+      <div class="kpi"><div class="label">Logistique réservée</div><div class="value skeleton" id="kLog">00</div><div class="bar"><i id="kLogBar"></i></div></div>
+      <div class="kpi"><div class="label">Coût réservé</div><div class="value skeleton" id="kCost">00</div><div class="sub">prix unitaire × quantité</div></div>
+    </section>
+
+    <div class="banner" id="banner"></div>
+
+    <section class="grid g-2-1">
+      <div class="card">
+        <div class="card-h"><h2>Coût de la logistique réservée par événement</h2><span class="hint">en dinars (DT)</span></div>
+        <div class="chart-box"><canvas id="chCost" aria-label="Coût par événement"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h2>Participants par tâche</h2><span class="hint">tous événements</span></div>
+        <div class="chart-box"><canvas id="chTache" aria-label="Participants par tâche"></canvas></div>
+      </div>
+    </section>
+
+    <section class="grid g-1-2">
+      <div class="card">
+        <div class="card-h"><h2>Prochains événements</h2><span class="pill yellow" id="upCount">0</span></div>
+        <ul class="timeline" id="timeline"><li class="empty">Chargement…</li></ul>
+      </div>
+      <div class="card">
+        <div class="card-h"><h2>Composition des équipes par événement</h2><span class="hint">participants par tâche</span></div>
+        <div class="chart-box sm"><canvas id="chStack" aria-label="Participants par événement"></canvas></div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:16px">
+      <div class="card-h">
+        <h2>Tous les événements</h2>
+        <div class="toolbar">
+          <input type="text" id="evSearch" placeholder="Rechercher…" aria-label="Rechercher un événement">
+          <input type="date" id="evFrom" aria-label="Du">
+          <input type="date" id="evTo" aria-label="Au">
+          <button class="btn btn-blue" id="evFilter" type="button">Filtrer</button>
+          <button class="btn btn-light" id="evReset" type="button">Tout</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Événement</th><th>Dates</th><th class="num">Durée</th><th class="num">Participants</th>
+            <th class="num">Logistique</th><th class="num">Coût réservé</th><th>Statut</th>
+          </tr></thead>
+          <tbody id="evBody"><tr><td colspan="7" class="empty">Chargement…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:16px">
+      <div class="card-h">
+        <div class="tabs" role="tablist">
+          <button class="active" data-tab="part" type="button" role="tab">Participants</button>
+          <button data-tab="log" type="button" role="tab">Logistique</button>
+        </div>
+        <input type="text" id="listSearch" placeholder="Rechercher…" aria-label="Rechercher dans la liste">
+      </div>
+      <div class="table-wrap" id="partWrap">
+        <table>
+          <thead><tr><th>Nom</th><th>Prénom</th><th>Tâche</th><th class="num">Événements</th></tr></thead>
+          <tbody id="partBody"><tr><td colspan="4" class="empty">Chargement…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="table-wrap" id="logWrap" hidden>
+        <table>
+          <thead><tr><th>Description</th><th>Statut</th><th class="num">Prix unitaire</th><th class="num">Quantité</th><th class="num">Total</th></tr></thead>
+          <tbody id="logBody"><tr><td colspan="5" class="empty">Chargement…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer><i></i>Faculté des Sciences de Tunis · Projet Events — IGL5 G2</footer>
+
+<!-- Modale d'ajout -->
+<div class="overlay" id="overlay" aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <div class="modal-h">
+      <h3 id="mTitle">Ajouter</h3>
+      <button class="close" id="mClose" type="button" aria-label="Fermer">×</button>
+    </div>
+    <div class="modal-b">
+      <div class="tabs" id="mTabs">
+        <button class="active" data-form="fEvent" type="button">Événement</button>
+        <button data-form="fPart" type="button">Participant</button>
+        <button data-form="fLog" type="button">Logistique</button>
+      </div>
+
+      <form id="fEvent" class="form-grid">
+        <div class="field full"><label for="eDesc">Description</label><input type="text" id="eDesc" required placeholder="ex. Journée de la recherche"></div>
+        <div class="field"><label for="eDebut">Date de début</label><input type="date" id="eDebut" required></div>
+        <div class="field"><label for="eFin">Date de fin</label><input type="date" id="eFin" required></div>
+        <div class="field full"><label>Participants</label><div class="checklist" id="eParts"></div></div>
+      </form>
+
+      <form id="fPart" class="form-grid" hidden>
+        <div class="field"><label for="pNom">Nom</label><input type="text" id="pNom" required></div>
+        <div class="field"><label for="pPrenom">Prénom</label><input type="text" id="pPrenom" required></div>
+        <div class="field full"><label for="pTache">Tâche</label>
+          <select id="pTache"><option value="INVITE">Invité</option><option value="ORGANISATEUR">Organisateur</option><option value="ANIMATEUR">Animateur</option><option value="SERVEUR">Serveur</option></select>
+        </div>
+      </form>
+
+      <form id="fLog" class="form-grid" hidden>
+        <div class="field full"><label for="lEvent">Événement</label><select id="lEvent" required></select></div>
+        <div class="field full"><label for="lDesc">Description</label><input type="text" id="lDesc" required placeholder="ex. Vidéoprojecteur"></div>
+        <div class="field"><label for="lPrix">Prix unitaire (DT)</label><input type="number" id="lPrix" min="0" step="0.01" required></div>
+        <div class="field"><label for="lQte">Quantité</label><input type="number" id="lQte" min="1" step="1" required></div>
+        <div class="field full"><label class="switch"><input type="checkbox" id="lRes" checked> Réservée</label></div>
+      </form>
+    </div>
+    <div class="modal-f">
+      <button class="btn btn-light" id="mCancel" type="button">Annuler</button>
+      <button class="btn btn-blue" id="mSave" type="button">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="js/chart.umd.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // URLs relatives : fonctionnent avec le context-path /events
+  var API = {
+    summary: "event-stats/summary",
+    events: "event-stats",
+    between: function (a, b) { return "event-stats/between/" + a + "/" + b; },
+    participants: "participant/all",
+    logistics: "logistics",
+    addParticipant: "participant/add",
+    addEvent: "event/addEvent",
+    addLog: function (desc) { return "event/addAffectLog/" + encodeURIComponent(desc); },
+    changeTache: function (id, t) { return "participant/" + id + "/tache/" + t; }
+  };
+
+  var TACHES = ["ORGANISATEUR", "ANIMATEUR", "SERVEUR", "INVITE"];
+  var TACHE_LABEL = { ORGANISATEUR: "Organisateur", ANIMATEUR: "Animateur", SERVEUR: "Serveur", INVITE: "Invité" };
+  var TACHE_COLOR = { ORGANISATEUR: "#000098", ANIMATEUR: "#4b5bd6", SERVEUR: "#ccce01", INVITE: "#a7acd8" };
+
+  var state = { events: [], participants: [], logistics: [], tab: "part" };
+  var charts = {};
+  var $ = function (id) { return document.getElementById(id); };
+
+  var nf = new Intl.NumberFormat("fr-TN", { maximumFractionDigits: 0 });
+  var nf2 = new Intl.NumberFormat("fr-TN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var df = new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
+  function dt(v) { return nf.format(v || 0) + " DT"; }
+  function parseDate(s) { if (!s) return null; var p = s.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  function fmtDate(s) { var d = parseDate(s); return d ? df.format(d) : "—"; }
+  function todayISO() { var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
+  function daysUntil(s) { var d = parseDate(s); if (!d) return null; var t = new Date(); t.setHours(0,0,0,0); return Math.round((d - t) / 86400000); }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+
+  function toast(msg, isErr) {
+    var t = $("toast"); t.textContent = msg; t.className = "toast show" + (isErr ? " err" : "");
+    clearTimeout(t._h); t._h = setTimeout(function () { t.className = "toast"; }, 3200);
+  }
+  function setApi(ok) {
+    $("apiDot").className = "dot " + (ok ? "on" : "off");
+    $("apiTxt").textContent = ok ? "API connectée" : "API injoignable";
+    var b = $("banner");
+    if (ok) { b.className = "banner"; }
+    else { b.className = "banner show"; b.textContent = "Impossible de joindre l'API. Vérifiez que l'application Spring Boot tourne (port 8089) et que MySQL est démarré."; }
+  }
+
+  function http(method, url, body) {
+    var opts = { method: method, headers: { "Accept": "application/json" } };
+    if (body !== undefined) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+    return fetch(url, opts).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          var msg = "Erreur " + r.status;
+          try { var j = JSON.parse(t); if (j.message) msg += " : " + j.message; } catch (e) { /* texte brut */ }
+          throw new Error(msg);
+        });
+      }
+      return r.status === 204 ? null : r.text().then(function (t) { return t ? JSON.parse(t) : null; });
+    });
+  }
+
+  // ---------- Chargement ----------
+  function loadAll() {
+    return Promise.all([
+      http("GET", API.summary), http("GET", API.events),
+      http("GET", API.participants), http("GET", API.logistics)
+    ]).then(function (res) {
+      setApi(true);
+      state.events = res[1] || [];
+      state.participants = res[2] || [];
+      state.logistics = res[3] || [];
+      renderKpis(res[0] || {});
+      renderCharts(res[0] || {});
+      renderTimeline();
+      renderEvents(state.events);
+      renderLists();
+      fillSelects();
+    }).catch(function (e) {
+      setApi(false);
+      console.error(e);
+    });
+  }
+
+  function setVal(id, html) { var el = $(id); el.classList.remove("skeleton"); el.innerHTML = html; }
+
+  function renderKpis(s) {
+    var passes = (s.nbEvents || 0) - (s.nbEventsAVenir || 0);
+    setVal("kEvents", nf.format(s.nbEvents || 0));
+    $("kEventsSub").textContent = passes + " passé" + (passes > 1 ? "s" : "");
+    setVal("kUpcoming", nf.format(s.nbEventsAVenir || 0));
+    var next = state.events.filter(function (e) { return daysUntil(e.dateDebut) >= 0; })[0];
+    $("kUpcomingSub").textContent = next ? "Prochain : " + (daysUntil(next.dateDebut) === 0 ? "aujourd'hui" : "dans " + daysUntil(next.dateDebut) + " j") : "Aucun programmé";
+    setVal("kPart", nf.format(s.nbParticipants || 0));
+    var pt = s.participantsParTache || {};
+    $("kPartSub").textContent = (pt.ORGANISATEUR || 0) + " organisateur" + ((pt.ORGANISATEUR || 0) > 1 ? "s" : "");
+    setVal("kLog", nf.format(s.nbLogisticsReservees || 0) + "<small>/ " + nf.format(s.nbLogistics || 0) + "</small>");
+    $("kLogBar").style.width = Math.min(100, s.tauxReservation || 0) + "%";
+    $("kLogBar").parentNode.title = nf.format(s.tauxReservation || 0) + " % réservé";
+    setVal("kCost", nf.format(s.coutTotalLogistiqueReservee || 0) + "<small>DT</small>");
+  }
+
+  function renderCharts(s) {
+    if (typeof Chart === "undefined") return;
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    Chart.defaults.color = "#4a4f6e";
+    Chart.defaults.plugins.legend.labels.usePointStyle = true;
+    Chart.defaults.plugins.legend.labels.boxWidth = 8;
+    Chart.defaults.plugins.tooltip.backgroundColor = "#10132b";
+    Chart.defaults.plugins.tooltip.padding = 10;
+    Chart.defaults.plugins.tooltip.cornerRadius = 8;
+
+    var evs = state.events;
+    var labels = evs.map(function (e) { return e.description; });
+    var maxLen = window.innerWidth < 640 ? 14 : 26;
+    var short = labels.map(function (l) { return l.length > maxLen ? l.slice(0, maxLen - 1) + "…" : l; });
+
+    // Coût par événement
+    var today = todayISO();
+    upsert("chCost", {
+      type: "bar",
+      data: { labels: short, datasets: [{
+        label: "Coût réservé",
+        data: evs.map(function (e) { return e.coutLogistiqueReservee; }),
+        backgroundColor: evs.map(function (e) { return e.dateDebut >= today ? "#000098" : "#b9bde6"; }),
+        borderRadius: 6, maxBarThickness: 34
+      }]},
+      options: {
+        indexAxis: "y", maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: {
+          title: function (it) { return labels[it[0].dataIndex]; },
+          label: function (c) { return " " + nf2.format(c.raw) + " DT"; } } } },
+        scales: { x: { grid: { color: "#eef0f6" }, border: { display: false }, ticks: { callback: function (v) { return nf.format(v); } } },
+                  y: { grid: { display: false }, border: { display: false } } }
+      }
+    });
+
+    // Participants par tâche
+    var pt = s.participantsParTache || {};
+    upsert("chTache", {
+      type: "doughnut",
+      data: { labels: TACHES.map(function (t) { return TACHE_LABEL[t]; }), datasets: [{
+        data: TACHES.map(function (t) { return pt[t] || 0; }),
+        backgroundColor: TACHES.map(function (t) { return TACHE_COLOR[t]; }),
+        borderColor: "#fff", borderWidth: 3, hoverOffset: 6
+      }]},
+      options: { maintainAspectRatio: false, cutout: "64%",
+        plugins: { legend: { position: "bottom" } } },
+      plugins: [centerText(function () { return nf.format(s.nbParticipants || 0); }, "participants")]
+    });
+
+    // Composition par événement (barres empilées)
+    upsert("chStack", {
+      type: "bar",
+      data: { labels: short, datasets: TACHES.map(function (t) { return {
+        label: TACHE_LABEL[t], backgroundColor: TACHE_COLOR[t], borderRadius: 4, maxBarThickness: 40,
+        data: evs.map(function (e) { return (e.participantsParTache || {})[t] || 0; })
+      }; })},
+      options: { maintainAspectRatio: false,
+        plugins: { legend: { position: "bottom" }, tooltip: { mode: "index", callbacks: { title: function (it) { return labels[it[0].dataIndex]; } } } },
+        scales: { x: { stacked: true, grid: { display: false }, border: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
+                  y: { stacked: true, beginAtZero: true, grid: { color: "#eef0f6" }, border: { display: false }, ticks: { precision: 0 } } } }
+    });
+  }
+
+  function centerText(getValue, caption) {
+    return { id: "center", afterDraw: function (c) {
+      var a = c.chartArea; if (!a) return;
+      var x = (a.left + a.right) / 2, y = (a.top + a.bottom) / 2, ctx = c.ctx;
+      ctx.save(); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillStyle = "#10132b"; ctx.font = "700 26px " + Chart.defaults.font.family; ctx.fillText(getValue(), x, y - 8);
+      ctx.fillStyle = "#8a8fa8"; ctx.font = "500 12px " + Chart.defaults.font.family; ctx.fillText(caption, x, y + 14);
+      ctx.restore();
+    } };
+  }
+
+  function upsert(id, cfg) {
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart($(id), cfg);
+  }
+
+  function renderTimeline() {
+    var up = state.events.filter(function (e) { return daysUntil(e.dateDebut) >= 0; });
+    $("upCount").textContent = up.length;
+    var ul = $("timeline");
+    if (!up.length) { ul.innerHTML = '<li class="empty">Aucun événement à venir</li>'; return; }
+    var mf = new Intl.DateTimeFormat("fr-FR", { month: "short" });
+    ul.innerHTML = up.map(function (e) {
+      var d = parseDate(e.dateDebut), n = daysUntil(e.dateDebut);
+      var when = n === 0 ? "Aujourd'hui" : n === 1 ? "Demain" : "Dans " + n + " jours";
+      return '<li class="tl"><div class="date"><b>' + d.getDate() + '</b><span>' + mf.format(d).replace(".", "") + '</span></div>' +
+        '<div style="min-width:0"><div class="title" title="' + esc(e.description) + '">' + esc(e.description) + '</div>' +
+        '<div class="meta"><span class="pill ' + (n <= 7 ? "warn" : "blue") + '">' + when + '</span>' +
+        '<span>' + e.nbParticipants + ' participant' + (e.nbParticipants > 1 ? "s" : "") + '</span>' +
+        '<span>' + dt(e.coutLogistiqueReservee) + '</span></div></div></li>';
+    }).join("");
+  }
+
+  function statusPill(e) {
+    var s = daysUntil(e.dateDebut), f = daysUntil(e.dateFin);
+    if (s === null) return '<span class="pill grey">Sans date</span>';
+    if (s > 0) return '<span class="pill blue">À venir</span>';
+    if (f !== null && f >= 0) return '<span class="pill ok">En cours</span>';
+    return '<span class="pill grey">Terminé</span>';
+  }
+
+  function renderEvents(list) {
+    var q = $("evSearch").value.trim().toLowerCase();
+    var rows = list.filter(function (e) { return !q || (e.description || "").toLowerCase().indexOf(q) >= 0; });
+    var max = Math.max.apply(null, rows.map(function (e) { return e.coutLogistiqueReservee; }).concat([1]));
+    $("evBody").innerHTML = rows.length ? rows.map(function (e) {
+      return "<tr><td><strong>" + esc(e.description) + "</strong></td>" +
+        "<td>" + fmtDate(e.dateDebut) + (e.dateFin && e.dateFin !== e.dateDebut ? " → " + fmtDate(e.dateFin) : "") + "</td>" +
+        '<td class="num">' + e.dureeJours + " j</td>" +
+        '<td class="num">' + e.nbParticipants + "</td>" +
+        '<td class="num">' + e.nbLogisticsReservees + " / " + e.nbLogistics + "</td>" +
+        '<td class="num">' + nf2.format(e.coutLogistiqueReservee) + ' DT<span class="mini-bar"><i style="width:' + (100 * e.coutLogistiqueReservee / max) + '%"></i></span></td>' +
+        "<td>" + statusPill(e) + "</td></tr>";
+    }).join("") : '<tr><td colspan="7" class="empty">Aucun événement</td></tr>';
+  }
+
+  function renderLists() {
+    var q = $("listSearch").value.trim().toLowerCase();
+    var parts = state.participants.filter(function (p) {
+      return !q || ((p.nom || "") + " " + (p.prenom || "") + " " + (p.tache || "")).toLowerCase().indexOf(q) >= 0;
+    }).sort(function (a, b) { return (a.nom || "").localeCompare(b.nom || ""); });
+    $("partBody").innerHTML = parts.length ? parts.map(function (p) {
+      var opts = TACHES.map(function (t) { return '<option value="' + t + '"' + (p.tache === t ? " selected" : "") + ">" + TACHE_LABEL[t] + "</option>"; }).join("");
+      return "<tr><td><strong>" + esc(p.nom) + "</strong></td><td>" + esc(p.prenom) + "</td>" +
+        '<td><select class="inline" data-part="' + p.idPart + '" aria-label="Tâche">' + opts + "</select></td>" +
+        '<td class="num">' + (p.events ? p.events.length : 0) + "</td></tr>";
+    }).join("") : '<tr><td colspan="4" class="empty">Aucun participant</td></tr>';
+
+    var logs = state.logistics.filter(function (l) { return !q || (l.description || "").toLowerCase().indexOf(q) >= 0; });
+    $("logBody").innerHTML = logs.length ? logs.map(function (l) {
+      return "<tr><td><strong>" + esc(l.description) + "</strong></td>" +
+        "<td>" + (l.reserve ? '<span class="pill ok">Réservée</span>' : '<span class="pill warn">Non réservée</span>') + "</td>" +
+        '<td class="num">' + nf2.format(l.prixUnit) + ' DT</td><td class="num">' + l.quantite + "</td>" +
+        '<td class="num"><strong>' + nf2.format(l.prixUnit * l.quantite) + " DT</strong></td></tr>";
+    }).join("") : '<tr><td colspan="5" class="empty">Aucune logistique</td></tr>';
+  }
+
+  function fillSelects() {
+    $("eParts").innerHTML = state.participants.length ? state.participants.map(function (p) {
+      return '<label><input type="checkbox" value="' + p.idPart + '"> ' + esc(p.nom + " " + p.prenom) +
+        ' <span class="pill grey" style="margin-left:auto">' + TACHE_LABEL[p.tache] + "</span></label>";
+    }).join("") : '<div class="empty" style="padding:12px">Ajoutez d\'abord des participants</div>';
+    $("lEvent").innerHTML = state.events.map(function (e) {
+      return '<option value="' + esc(e.description) + '">' + esc(e.description) + "</option>";
+    }).join("");
+  }
+
+  // ---------- Interactions ----------
+  $("btnRefresh").addEventListener("click", function () { loadAll().then(function () { toast("Données actualisées"); }); });
+  $("evSearch").addEventListener("input", function () { renderEvents(state.filtered || state.events); });
+  $("evFilter").addEventListener("click", function () {
+    var a = $("evFrom").value, b = $("evTo").value;
+    if (!a || !b) { toast("Choisissez une date de début et de fin", true); return; }
+    http("GET", API.between(a, b)).then(function (list) {
+      state.filtered = list || [];
+      renderEvents(state.filtered);
+      toast(state.filtered.length + " événement(s) entre le " + fmtDate(a) + " et le " + fmtDate(b));
+    }).catch(function (e) { toast(e.message, true); });
+  });
+  $("evReset").addEventListener("click", function () {
+    state.filtered = null; $("evFrom").value = ""; $("evTo").value = ""; $("evSearch").value = "";
+    renderEvents(state.events);
+  });
+
+  document.querySelectorAll(".tabs [data-tab]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.querySelectorAll(".tabs [data-tab]").forEach(function (x) { x.classList.toggle("active", x === b); });
+      state.tab = b.getAttribute("data-tab");
+      $("partWrap").hidden = state.tab !== "part";
+      $("logWrap").hidden = state.tab !== "log";
+    });
+  });
+  $("listSearch").addEventListener("input", renderLists);
+  $("partBody").addEventListener("change", function (ev) {
+    var sel = ev.target; if (!sel.matches("select[data-part]")) return;
+    http("PUT", API.changeTache(sel.getAttribute("data-part"), sel.value))
+      .then(function () { toast("Tâche mise à jour"); return loadAll(); })
+      .catch(function (e) { toast(e.message, true); });
+  });
+
+  // Modale
+  var currentForm = "fEvent";
+  function openModal() {
+    $("overlay").classList.add("open"); $("overlay").setAttribute("aria-hidden", "false");
+    if (!$("eDebut").value) { $("eDebut").value = todayISO(); $("eFin").value = todayISO(); }
+    setTimeout(function () { var f = $(currentForm).querySelector("input,select"); if (f) f.focus(); }, 30);
+  }
+  function closeModal() { $("overlay").classList.remove("open"); $("overlay").setAttribute("aria-hidden", "true"); }
+  $("btnAdd").addEventListener("click", openModal);
+  $("mClose").addEventListener("click", closeModal);
+  $("mCancel").addEventListener("click", closeModal);
+  $("overlay").addEventListener("click", function (e) { if (e.target === this) closeModal(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeModal(); });
+  document.querySelectorAll("#mTabs button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.querySelectorAll("#mTabs button").forEach(function (x) { x.classList.toggle("active", x === b); });
+      currentForm = b.getAttribute("data-form");
+      ["fEvent", "fPart", "fLog"].forEach(function (id) { $(id).hidden = id !== currentForm; });
+    });
+  });
+
+  $("mSave").addEventListener("click", function () {
+    var form = $(currentForm);
+    if (!form.reportValidity()) return;
+    var req;
+    if (currentForm === "fEvent") {
+      if ($("eFin").value < $("eDebut").value) { toast("La date de fin précède la date de début", true); return; }
+      var ids = Array.prototype.map.call($("eParts").querySelectorAll("input:checked"), function (c) { return { idPart: +c.value }; });
+      req = http("POST", API.addEvent, { description: $("eDesc").value.trim(), dateDebut: $("eDebut").value, dateFin: $("eFin").value, participants: ids });
+    } else if (currentForm === "fPart") {
+      req = http("POST", API.addParticipant, { nom: $("pNom").value.trim(), prenom: $("pPrenom").value.trim(), tache: $("pTache").value });
+    } else {
+      if (!$("lEvent").value) { toast("Créez d'abord un événement", true); return; }
+      req = http("PUT", API.addLog($("lEvent").value), {
+        description: $("lDesc").value.trim(), reserve: $("lRes").checked,
+        prixUnit: parseFloat($("lPrix").value), quantite: parseInt($("lQte").value, 10) });
+    }
+    $("mSave").disabled = true;
+    req.then(function () { form.reset(); $("lRes").checked = true; closeModal(); toast("Enregistré avec succès"); return loadAll(); })
+       .catch(function (e) { toast(e.message, true); })
+       .then(function () { $("mSave").disabled = false; });
+  });
+
+  // ---------- Démarrage ----------
+  var now = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
+  $("today").textContent = now.charAt(0).toUpperCase() + now.slice(1) + " · Faculté des Sciences de Tunis";
+  loadAll();
+})();
+</script>
+</body>
+</html>
