@@ -1,0 +1,16 @@
+configuration-as-code
+job-dsl
+workflow-aggregator
+workflow-multibranch
+git
+github-branch-source
+pipeline-stage-view
+pipeline-graph-view
+credentials-binding
+sonar
+junit
+coverage
+timestamper
+ansicolor
+ws-cleanup
+slack

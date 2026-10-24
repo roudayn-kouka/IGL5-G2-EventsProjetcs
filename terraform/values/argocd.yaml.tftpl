@@ -1,0 +1,51 @@
+# Valeurs du chart argo-cd (rendues par Terraform)
+configs:
+  params:
+    server.insecure: true            # TLS non requis : service joignable uniquement depuis le VPC
+  cm:
+    timeout.reconciliation: 60s      # relit Git toutes les minutes (en plus du refresh demandé par Jenkins)
+%{ if github_token != "" ~}
+  credentialTemplates:
+    github:
+      url: https://github.com/roudayn-kouka
+      username: git
+      password: ${github_token}
+%{ endif ~}
+
+server:
+  service:
+    # NLB INTERNE : seul Jenkins (dans le VPC) parle à l'API Argo CD ; l'interface s'ouvre par port-forward
+    type: LoadBalancer
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: nlb
+      service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+    loadBalancerSourceRanges:
+      - ${vpc_cidr}
+
+# Argo CD Notifications -> Slack (#igl5-g2-deploiements)
+notifications:
+  enabled: true
+  secret:
+    items:
+      slack-token: "${slack_bot_token}"
+  notifiers:
+    service.slack: |
+      token: $slack-token
+  templates:
+    template.app-deployed: |
+      message: ":rocket: *{{.app.metadata.name}}* déployée — image {{range .app.status.summary.images}}`{{.}}` {{end}}— révision {{.app.status.sync.revision | trunc 7}}"
+    template.app-sync-failed: |
+      message: ":x: Échec de synchronisation de *{{.app.metadata.name}}* : {{.app.status.operationState.message}}"
+    template.app-health-degraded: |
+      message: ":warning: *{{.app.metadata.name}}* est dégradée (pods en échec ?)"
+  triggers:
+    trigger.on-deployed: |
+      - when: app.status.operationState != nil and app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+        oncePer: app.status.sync.revision
+        send: [app-deployed]
+    trigger.on-sync-failed: |
+      - when: app.status.operationState != nil and app.status.operationState.phase in ['Error', 'Failed']
+        send: [app-sync-failed]
+    trigger.on-health-degraded: |
+      - when: app.status.health.status == 'Degraded'
+        send: [app-health-degraded]

@@ -1,0 +1,44 @@
+- name: Attendre que Nexus réponde
+  ansible.builtin.uri:
+    url: "https://nexus.{{ base_domain }}/service/rest/v1/status"
+    status_code: 200
+  register: nexus_status
+  until: nexus_status.status == 200
+  retries: 40
+  delay: 15
+  become: false
+
+- name: Mot de passe initial généré par Nexus (premier démarrage uniquement)
+  ansible.builtin.command: docker compose exec -T nexus cat /nexus-data/admin.password
+  args:
+    chdir: "{{ stack_dir }}"
+  register: nexus_initial
+  changed_when: false
+  failed_when: false
+
+- name: Définir le mot de passe admin (Ansible Vault)
+  ansible.builtin.uri:
+    url: "https://nexus.{{ base_domain }}/service/rest/v1/security/users/admin/change-password"
+    method: PUT
+    user: admin
+    password: "{{ nexus_initial.stdout }}"
+    force_basic_auth: true
+    headers: { Content-Type: text/plain }
+    body: "{{ nexus_admin_password }}"
+    status_code: 204
+  when: nexus_initial.rc == 0 and nexus_initial.stdout | length > 0
+  no_log: true
+  become: false
+
+- name: Désactiver l'accès anonyme
+  ansible.builtin.uri:
+    url: "https://nexus.{{ base_domain }}/service/rest/v1/security/anonymous"
+    method: PUT
+    user: admin
+    password: "{{ nexus_admin_password }}"
+    force_basic_auth: true
+    body_format: json
+    body: { enabled: false, userId: anonymous, realmName: NexusAuthorizingRealm }
+    status_code: 200
+  no_log: true
+  become: false

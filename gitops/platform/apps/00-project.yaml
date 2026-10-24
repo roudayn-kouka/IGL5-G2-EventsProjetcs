@@ -1,0 +1,19 @@
+# Projet Argo CD : limite ce que les environnements Events ont le droit de faire
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: events
+  namespace: argocd
+spec:
+  description: Environnements de l'application Events (features, staging, prod)
+  sourceRepos:
+    - https://github.com/roudayn-kouka/IGL5-G2-Events-Platform.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: "events-*"          # impossible de déployer ailleurs
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
