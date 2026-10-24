@@ -1,0 +1,7 @@
+# Environnement éphémère d'une feature : léger, données de démo, base jetable
+replicaCount: 1
+app:
+  demoData: true
+mysql:
+  persistence:
+    enabled: false

@@ -1,0 +1,24 @@
+- name: Docker Engine et plugin Compose
+  ansible.builtin.apt:
+    name: [docker.io, docker-compose-v2]
+    state: present
+
+- name: Rotation des journaux des conteneurs
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    content: |
+      { "log-driver": "json-file", "log-opts": { "max-size": "20m", "max-file": "3" } }
+    mode: "0644"
+  notify: Redémarrer Docker
+
+- name: Service Docker actif au démarrage
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: L'utilisateur ubuntu peut utiliser Docker
+  ansible.builtin.user:
+    name: ubuntu
+    groups: docker
+    append: true

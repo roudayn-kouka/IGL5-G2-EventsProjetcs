@@ -1,10 +1,22 @@
+### Maven / Spring Boot ###
 HELP.md
 target/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
 
-### STS ###
+### IDE ###
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+# VS Code
+.vscode/
+# Eclipse / STS
 .apt_generated
 .classpath
 .factorypath
@@ -12,22 +24,32 @@ target/
 .settings
 .springBeans
 .sts4-cache
-
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
-
-### NetBeans ###
+# NetBeans
 /nbproject/private/
 /nbbuild/
 /dist/
 /nbdist/
 /.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
 
-### VS Code ###
-.vscode/
+### Secrets et configuration locale ###
+# Docker Compose
+.env
+# Terraform : état, providers, variables et backend réels
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/terraform.tfvars
+**/backend.hcl
+**/crash.log
+**/crash.*.log
+# Ansible : Vault (chiffré ou non, jamais versionné), copies déchiffrées, runtime généré
+platform/ansible/group_vars/devops/vault.yml
+platform/ansible/group_vars/devops/vault.yml.dec
+**/*.vault.dec
+platform/ansible/group_vars/devops/runtime.yml
+*.retry
+
+### Rapports et journaux générés ###
+*.log
+trivy-*.txt
+gitleaks-report.json

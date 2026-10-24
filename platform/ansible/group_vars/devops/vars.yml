@@ -1,0 +1,29 @@
+# Configuration de l'usine DevOps
+stack_dir: /opt/fst-devops
+base_domain: "{{ devops_public_ip }}.sslip.io"     # jenkins.<ip>.sslip.io, sonar..., nexus...
+timezone: Africa/Tunis
+
+# Dépôts GitHub
+github_owner: roudayn-kouka
+app_repo: IGL5-G2-EventsProjetcs
+platform_repo: roudayn-kouka/IGL5-G2-EventsProjetcs
+gitops_branch: gitops
+
+# Points d'accès utilisés par le pipeline (variables globales Jenkins)
+nexus_internal_url: http://nexus:8081
+# argocd_server et apps_domain : écrits par `make post-apply` dans runtime.yml (ignoré par Git).
+# Ne pas les définir ici : vars.yml est lu après runtime.yml (ordre alphabétique) et les écraserait.
+sonarqube_internal_url: http://sonarqube:9000
+sonar_webhook_url: http://jenkins:8080/sonarqube-webhook/
+github_webhook_url: "https://jenkins.{{ base_domain }}/github-webhook/"
+
+# Secrets : définis dans vault.yml (chiffré avec ansible-vault)
+jenkins_admin_password: "{{ vault_jenkins_admin_password }}"
+nexus_admin_password: "{{ vault_nexus_admin_password }}"
+sonar_db_password: "{{ vault_sonar_db_password }}"
+sonar_admin_password: "{{ vault_sonar_admin_password }}"
+github_user: "{{ vault_github_user }}"
+github_token: "{{ vault_github_token }}"
+argocd_token: "{{ vault_argocd_token | default('') }}"
+sonar_token: "{{ vault_sonar_token | default('') }}"
+slack_bot_token: "{{ vault_slack_bot_token | default('') }}"

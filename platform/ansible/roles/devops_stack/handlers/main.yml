@@ -1,0 +1,5 @@
+- name: Redémarrer Jenkins
+  community.docker.docker_compose_v2:
+    project_src: "{{ stack_dir }}"
+    services: [jenkins]
+    state: restarted

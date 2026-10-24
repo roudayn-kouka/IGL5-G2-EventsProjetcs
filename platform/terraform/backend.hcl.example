@@ -1,0 +1,5 @@
+bucket         = "fst-events-tfstate-<account-id>-eu-west-3"
+key            = "platform/terraform.tfstate"
+region         = "eu-west-3"
+dynamodb_table = "fst-events-tflock"
+encrypt        = true

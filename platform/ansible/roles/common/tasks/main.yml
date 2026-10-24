@@ -1,0 +1,25 @@
+- name: Paquets de base
+  ansible.builtin.apt:
+    name: [curl, git, jq, unzip, htop, ca-certificates, python3-docker]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Fuseau horaire
+  community.general.timezone:
+    name: "{{ timezone }}"
+
+- name: Limites noyau exigées par SonarQube (Elasticsearch)
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/99-sonarqube.conf
+    reload: true
+  loop:
+    - { name: vm.max_map_count, value: "524288" }
+    - { name: fs.file-max, value: "131072" }
+
+- name: Mises à jour de sécurité automatiques
+  ansible.builtin.apt:
+    name: unattended-upgrades
+    state: present

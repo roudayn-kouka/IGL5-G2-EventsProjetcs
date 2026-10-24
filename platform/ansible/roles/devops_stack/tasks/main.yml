@@ -1,0 +1,63 @@
+- name: Répertoires de la stack
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ stack_dir }}"
+    - "{{ stack_dir }}/jenkins"
+
+# Même chemin sur l'hôte et dans le conteneur : « docker run -v $WORKSPACE:... » (Trivy, Gitleaks) fonctionne
+- name: Volume Jenkins (uid 1000 = utilisateur jenkins du conteneur)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "1000"
+    group: "1000"
+    mode: "0755"
+  loop:
+    - /var/jenkins_home
+    - /var/jenkins_home/casc
+
+- name: GID du groupe docker de l'hôte
+  ansible.builtin.getent:
+    database: group
+    key: docker
+
+- name: Image Jenkins personnalisée (outillage du pipeline)
+  ansible.builtin.copy:
+    src: "jenkins/{{ item }}"
+    dest: "{{ stack_dir }}/jenkins/{{ item }}"
+    mode: "0644"
+  loop: [Dockerfile, plugins.txt]
+
+- name: Fichiers de la stack
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - src: docker-compose.yml.j2
+      dest: "{{ stack_dir }}/docker-compose.yml"
+      mode: "0644"
+    - src: Caddyfile.j2
+      dest: "{{ stack_dir }}/Caddyfile"
+      mode: "0644"
+    - src: env.j2
+      dest: "{{ stack_dir }}/.env"
+      mode: "0600"
+
+- name: Configuration Jenkins as Code (JCasC)
+  ansible.builtin.template:
+    src: jenkins-casc.yaml.j2
+    dest: /var/jenkins_home/casc/jenkins.yaml
+    owner: "1000"
+    group: "1000"
+    mode: "0640"
+  notify: Redémarrer Jenkins
+
+- name: Démarrage de la stack (Caddy, Jenkins, Nexus, SonarQube, PostgreSQL)
+  community.docker.docker_compose_v2:
+    project_src: "{{ stack_dir }}"
+    build: policy
+    state: present
