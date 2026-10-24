@@ -1,0 +1,182 @@
+- name: Attendre que SonarQube réponde
+  ansible.builtin.uri:
+    url: "{{ sonarqube_internal_url }}/api/system/health"
+    method: GET
+    return_content: true
+    status_code: 200
+  register: sonar_config_health
+  retries: 60
+  delay: 10
+  until: sonar_config_health.json.health in ["GREEN", "YELLOW"]
+
+- name: Vérifier si le mot de passe administrateur Vault est déjà actif
+  ansible.builtin.uri:
+    url: "{{ sonarqube_internal_url }}/api/authentication/validate"
+    method: GET
+    url_username: admin
+    url_password: "{{ sonar_admin_password }}"
+    force_basic_auth: true
+    return_content: true
+    status_code: 200
+  register: sonar_config_vault_auth
+  failed_when: false
+  no_log: true
+
+- name: Vérifier le mot de passe initial admin/admin
+  ansible.builtin.uri:
+    url: "{{ sonarqube_internal_url }}/api/authentication/validate"
+    method: GET
+    url_username: admin
+    url_password: admin
+    force_basic_auth: true
+    return_content: true
+    status_code: 200
+  register: sonar_config_initial_auth
+  failed_when: false
+  when: not (sonar_config_vault_auth.json.valid | default(false) | bool)
+  no_log: true
+
+- name: Vérifier que le mot de passe administrateur est connu
+  ansible.builtin.assert:
+    that:
+      - (sonar_config_vault_auth.json.valid | default(false) | bool) or
+        (sonar_config_initial_auth.json.valid | default(false) | bool)
+    fail_msg: >-
+      SonarQube ne valide ni le mot de passe Vault ni admin/admin.
+      Corrige vault_sonar_admin_password avant de poursuivre.
+
+- name: Remplacer le mot de passe initial de SonarQube
+  ansible.builtin.uri:
+    url: "{{ sonarqube_internal_url }}/api/users/change_password"
+    method: POST
+    url_username: admin
+    url_password: admin
+    force_basic_auth: true
+    body_format: form-urlencoded
+    body:
+      login: admin
+      previousPassword: admin
+      password: "{{ sonar_admin_password }}"
+    status_code: 204
+  when:
+    - not (sonar_config_vault_auth.json.valid | default(false) | bool)
+    - sonar_config_initial_auth.json.valid | default(false) | bool
+  no_log: true
+
+- name: Vérifier l'authentification administrateur après configuration
+  ansible.builtin.uri:
+    url: "{{ sonarqube_internal_url }}/api/authentication/validate"
+    method: GET
+    url_username: admin
+    url_password: "{{ sonar_admin_password }}"
+    force_basic_auth: true
+    return_content: true
+    status_code: 200
+  register: sonar_config_admin_auth
+  no_log: true
+
+- name: Vérifier l'authentification SonarQube
+  ansible.builtin.assert:
+    that:
+      - sonar_config_admin_auth.json.valid | bool
+    fail_msg: "L'authentification administrateur SonarQube échoue après configuration."
+
+- name: Lister les webhooks SonarQube
+  ansible.builtin.uri:
+    url: "{{ sonarqube_internal_url }}/api/webhooks/list"
+    method: GET
+    url_username: admin
+    url_password: "{{ sonar_admin_password }}"
+    force_basic_auth: true
+    return_content: true
+    status_code: 200
+  register: sonar_config_webhooks
+  no_log: true
+
+- name: Retrouver le webhook Jenkins existant
+  ansible.builtin.set_fact:
+    sonar_config_jenkins_webhook: >-
+      {{ (sonar_config_webhooks.json.webhooks | selectattr('name', 'equalto', 'jenkins') | list | first)
+         | default({}) }}
+
+- name: Créer le webhook SonarQube vers Jenkins
+  ansible.builtin.uri:
+    url: "{{ sonarqube_internal_url }}/api/webhooks/create"
+    method: POST
+    url_username: admin
+    url_password: "{{ sonar_admin_password }}"
+    force_basic_auth: true
+    body_format: form-urlencoded
+    body:
+      name: jenkins
+      url: "{{ sonar_webhook_url }}"
+    status_code: 200
+  when: sonar_config_jenkins_webhook | length == 0
+  no_log: true
+
+- name: Mettre à jour l'URL du webhook SonarQube s'il existe déjà
+  ansible.builtin.uri:
+    url: "{{ sonarqube_internal_url }}/api/webhooks/update"
+    method: POST
+    url_username: admin
+    url_password: "{{ sonar_admin_password }}"
+    force_basic_auth: true
+    body_format: form-urlencoded
+    body:
+      key: "{{ sonar_config_jenkins_webhook.key }}"
+      name: jenkins
+      url: "{{ sonar_webhook_url }}"
+    status_code: 200
+  when:
+    - sonar_config_jenkins_webhook | length > 0
+    - sonar_config_jenkins_webhook.url != sonar_webhook_url
+  no_log: true
+
+- name: Lister les jetons SonarQube
+  ansible.builtin.uri:
+    url: "{{ sonarqube_internal_url }}/api/user_tokens/search"
+    method: GET
+    url_username: admin
+    url_password: "{{ sonar_admin_password }}"
+    force_basic_auth: true
+    return_content: true
+    status_code: 200
+  register: sonar_config_tokens
+  no_log: true
+
+- name: Déterminer si le jeton Jenkins existe déjà
+  ansible.builtin.set_fact:
+    sonar_config_jenkins_token_exists: >-
+      {{ (sonar_config_tokens.json.userTokens | selectattr('name', 'equalto', 'jenkins') | list | length) > 0 }}
+
+- name: Générer le jeton d'analyse Jenkins une seule fois
+  ansible.builtin.uri:
+    url: "{{ sonarqube_internal_url }}/api/user_tokens/generate"
+    method: POST
+    url_username: admin
+    url_password: "{{ sonar_admin_password }}"
+    force_basic_auth: true
+    body_format: form-urlencoded
+    body:
+      name: jenkins
+    return_content: true
+    status_code: 200
+  register: sonar_config_generated_token
+  when: not (sonar_config_jenkins_token_exists | bool)
+  no_log: true
+
+- name: Afficher le jeton Jenkins nouvellement créé (à enregistrer immédiatement dans le Vault)
+  ansible.builtin.debug:
+    msg: "Jeton SonarQube Jenkins (affiché une seule fois) : {{ sonar_config_generated_token.json.token }}"
+  when:
+    - not (sonar_config_jenkins_token_exists | bool)
+    - sonar_config_generated_token is not skipped
+
+- name: Signaler qu'un jeton existant ne peut pas être relu
+  ansible.builtin.debug:
+    msg: >-
+      Le jeton SonarQube nommé jenkins existe déjà et sa valeur n'est plus récupérable.
+      S'il manque dans vault_sonar_token, révoquez-le dans SonarQube et relancez ce rôle.
+  when:
+    - sonar_config_jenkins_token_exists | bool
+    - sonar_token | length == 0

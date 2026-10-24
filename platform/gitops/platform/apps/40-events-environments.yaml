@@ -1,0 +1,63 @@
+# =============================================================================
+#  « Même pipeline, features différentes » côté déploiement :
+#  chaque dossier gitops/envs/<env>/ (écrit par Jenkins) devient AUTOMATIQUEMENT
+#  une Application Argo CD  events-<env>  déployée dans son propre namespace.
+#  Supprimer le dossier => l'environnement est supprimé (finalizer).
+# =============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: events-environments
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/roudayn-kouka/IGL5-G2-Events-Platform.git
+        revision: main
+        files:
+          - path: "gitops/envs/*/config.json"
+  template:
+    metadata:
+      name: 'events-{{.path.basename}}'
+      labels:
+        tn.fst/profile: '{{.profile}}'
+        tn.fst/owner: '{{.owner}}'
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+      annotations:
+        # Argo CD Notifications -> Slack #igl5-g2-deploiements
+        notifications.argoproj.io/subscribe.on-deployed.slack: igl5-g2-deploiements
+        notifications.argoproj.io/subscribe.on-sync-failed.slack: igl5-g2-deploiements
+        notifications.argoproj.io/subscribe.on-health-degraded.slack: igl5-g2-deploiements
+    spec:
+      project: events
+      source:
+        repoURL: https://github.com/roudayn-kouka/IGL5-G2-Events-Platform.git
+        targetRevision: main
+        path: gitops/charts/events-app
+        helm:
+          valueFiles:
+            - 'values-{{.profile}}.yaml'
+            - '../../envs/{{.path.basename}}/values.yaml'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{.namespace}}'
+      # Le mot de passe MySQL est généré au premier déploiement : Argo CD ne doit plus y toucher
+      ignoreDifferences:
+        - kind: Secret
+          name: events-db
+          jsonPointers: [/data]
+      syncPolicy:
+        automated: { prune: true, selfHeal: true }
+        syncOptions:
+          - CreateNamespace=true
+          - RespectIgnoreDifferences=true
+        managedNamespaceMetadata:
+          labels:
+            tn.fst/environment: '{{.path.basename}}'
+            tn.fst/owner: '{{.owner}}'
+        retry: { limit: 5, backoff: { duration: 20s, factor: 2, maxDuration: 3m } }

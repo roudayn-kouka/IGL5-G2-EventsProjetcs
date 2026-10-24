@@ -1,0 +1,43 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: events-alerts
+  namespace: monitoring
+spec:
+  groups:
+    - name: events-app
+      rules:
+        - alert: EventsAppDown
+          expr: up{job="events-app"} == 0
+          for: 2m
+          labels: { severity: critical }
+          annotations:
+            summary: "Application Events indisponible ({{ $labels.namespace }})"
+            description: "La cible {{ $labels.instance }} ne répond plus depuis 2 minutes."
+
+        - alert: EventsHighErrorRate
+          expr: |
+            sum by (namespace) (rate(http_server_requests_seconds_count{job="events-app", status=~"5.."}[5m]))
+              / sum by (namespace) (rate(http_server_requests_seconds_count{job="events-app"}[5m])) > 0.05
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "Plus de 5 % d'erreurs 5xx ({{ $labels.namespace }})"
+
+        - alert: EventsHighLatencyP95
+          expr: |
+            histogram_quantile(0.95, sum by (namespace, le) (
+              rate(http_server_requests_seconds_bucket{job="events-app"}[5m]))) > 1
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "Latence p95 > 1 s ({{ $labels.namespace }})"
+
+        - alert: EventsJvmHeapHigh
+          expr: |
+            sum by (namespace, pod) (jvm_memory_used_bytes{job="events-app", area="heap"})
+              / sum by (namespace, pod) (jvm_memory_max_bytes{job="events-app", area="heap"} > 0) > 0.85
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "Heap JVM > 85 % ({{ $labels.namespace }}/{{ $labels.pod }})"

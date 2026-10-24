@@ -1,0 +1,11 @@
+# Copier en vault.yml, remplir, puis chiffrer :  ansible-vault encrypt group_vars/devops/vault.yml
+vault_jenkins_admin_password: "change-me"
+vault_nexus_admin_password: "change-me"
+vault_sonar_db_password: "change-me"
+vault_sonar_admin_password: "change-me"
+vault_github_user: "roudayn-kouka"
+vault_github_token: "ghp_..."           # repo + admin:repo_hook pour le webhook GitHub
+# Renseignés au 2e passage (une fois Argo CD et SonarQube démarrés) :
+vault_argocd_token: ""                  # argocd account generate-token --account jenkins
+vault_sonar_token: ""                   # SonarQube > My Account > Security
+vault_slack_bot_token: ""

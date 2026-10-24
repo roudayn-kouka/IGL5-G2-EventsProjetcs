@@ -1,0 +1,8 @@
+# Mis à jour par Jenkins à chaque build de develop
+feature: staging
+owner: equipe-igl5-g2
+image:
+  repository: 000000000000.dkr.ecr.eu-west-3.amazonaws.com/events-app
+  tag: staging-0-initial
+ingress:
+  host: staging.<IP-du-NLB>.sslip.io
