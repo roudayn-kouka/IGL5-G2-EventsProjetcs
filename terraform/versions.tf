@@ -8,12 +8,5 @@ terraform {
     local      = { source = "hashicorp/local", version = "~> 2.5" }
   }
 
-  # État partagé de l'équipe (recommandé) : créer le bucket et la table une fois, puis décommenter.
-  # backend "s3" {
-  #   bucket         = "fst-events-tfstate"
-  #   key            = "platform/terraform.tfstate"
-  #   region         = "eu-west-3"
-  #   dynamodb_table = "fst-events-tflock"
-  #   encrypt        = true
-  # }
+  backend "s3" {}
 }

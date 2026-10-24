@@ -28,7 +28,7 @@ variable "devops_instance_type" {
 }
 
 variable "admin_cidr" {
-  description = "Adresse IP autorisée en SSH sur l'usine DevOps (ex. 196.203.10.20/32)"
+  description = "CIDR autorisé en SSH sur l'usine DevOps et pour l'API publique EKS (ex. 196.203.10.20/32)"
   type        = string
 }
 
