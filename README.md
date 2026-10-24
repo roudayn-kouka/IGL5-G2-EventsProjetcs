@@ -30,6 +30,7 @@
 - [API REST](#api-rest)
 - [Tests et couverture](#tests-et-couverture)
 - [Pipeline CI/CD · DevSecOps · GitOps](#pipeline-cicd--devsecops--gitops)
+- [Sécurité](#sécurité)
 - [Structure du projet](#structure-du-projet)
 - [Workflow Git](#workflow-git)
 - [Dépannage](#dépannage)
@@ -394,13 +395,13 @@ Les numéros sont ceux du rapport de projet : l'étape 0 est le déclenchement w
 | 6 | `Quality Gate` | SonarQube, webhook | Attend le verdict Quality Gate. | Verdict | Oui | 156–164 |
 | 7 | `Publication JAR · Nexus` | Maven, Nexus | Publie le JAR validé, sauf PR. | Artefact Maven | Oui si déployé | 165–181 |
 | 8 | `Image Docker` | Docker, JRE 17 Alpine | Emballe le JAR testé dans une image non-root. | Image Docker taguée | Oui si déployé | 182–196 |
-| 9 | `Scan image · Trivy` | Trivy image | Scanne l'image; le mode strict bloque les CRITICAL corrigibles. | Rapport Trivy | Rapport; strict sur `release/*`/`main` | 197–213 |
-| 10 | `Push image · Amazon ECR` | AWS CLI, IAM, ECR | Publie via le rôle IAM de l'EC2. | Image stockée dans ECR | Oui si déployé | 214–227 |
-| 11 | `Approbation production` | Jenkins `input` | Attend l'approbation avant promotion de `main`. | Approbation de release | Oui, `main` uniquement | 228–237 |
-| 12 | `Promotion GitOps` | Git, GitHub | Clone `gitops` profondeur 20; écrit la config, rebase et pousse au plus 5 fois. | Commit SHA de déploiement | Oui si déployé | 238–296 |
-| 13 | `Synchronisation Argo CD` | Argo CD CLI, Kubernetes | Attend le SHA dans `sync.revisions[]`, avec `Synced` et `Healthy`. | Confirmation du déploiement | Oui si déployé | 297–326 |
-| 14 | `Tests post-déploiement` (sous-stages parallèles) | curl, Actuator, OWASP ZAP | Vérifie readiness/Prometheus et analyse passivement l'application. | Résultat des sondes et rapport ZAP | Actuator oui; ZAP selon branche | 327–364 |
-| 15 | Notification de fin (bloc `post`) | Slack | Notifie le résultat du build. | Message `#igl5-g2-ci` | Non | 367–384 |
+| 9 | `Scan image · Trivy` | Trivy image | Scanne l'image avec `.trivyignore`; le mode strict bloque les CRITICAL corrigeables non acceptées. | Rapport Trivy | Rapport; strict sur `release/*`/`main` | 197–214 |
+| 10 | `Push image · Amazon ECR` | AWS CLI, IAM, ECR | Publie via le rôle IAM de l'EC2. | Image stockée dans ECR | Oui si déployé | 215–228 |
+| 11 | `Approbation production` | Jenkins `input` | Attend l'approbation avant promotion de `main`. | Approbation de release | Oui, `main` uniquement | 229–238 |
+| 12 | `Promotion GitOps` | Git, GitHub | Clone `gitops` profondeur 20; écrit la config, rebase et pousse au plus 5 fois. | Commit SHA de déploiement | Oui si déployé | 239–297 |
+| 13 | `Synchronisation Argo CD` | Argo CD CLI, Kubernetes | Attend le SHA dans `sync.revisions[]`, avec `Synced` et `Healthy`. | Confirmation du déploiement | Oui si déployé | 298–327 |
+| 14 | `Tests post-déploiement` (sous-stages parallèles) | curl, Actuator, OWASP ZAP | Vérifie readiness/Prometheus et analyse passivement l'application. | Résultat des sondes et rapport ZAP | Actuator oui; ZAP selon branche | 328–365 |
+| 15 | Notification de fin (bloc `post`) | Slack | Notifie le résultat du build. | Message `#igl5-g2-ci` | Non | 368–385 |
 | 16 | Supervision continue (hors pipeline) | Prometheus, Alertmanager, Grafana | Scrape les métriques, alerte et affiche le dashboard. | Alertes et dashboards | Hors pipeline | `platform/gitops/platform/monitoring-config/` |
 
 Les chemins et lignes correspondent à ce dépôt unique; l'étape 0 est créée par `platform/ansible/roles/github_webhook/` et le job Multibranch est configuré dans `platform/ansible/roles/devops_stack/templates/jenkins-casc.yaml.j2`. Schéma du flux : [docs/pipeline-devops.png](docs/pipeline-devops.png).
@@ -418,7 +419,7 @@ Les chemins et lignes correspondent à ce dépôt unique; l'étape 0 est créée
 | H2 | Base en mémoire des tests d'intégration | `pom.xml`, `src/test/resources/application.properties` |
 | JaCoCo | Mesure et rapport de couverture | `pom.xml`, `Jenkinsfile`, `target/site/jacoco/` |
 | Gitleaks | Recherche de secrets dans l'historique Git | `Jenkinsfile` |
-| Trivy | Scan fichiers/IaC et image | `Jenkinsfile` |
+| Trivy | Scan fichiers/IaC et image | `Jenkinsfile`, `.trivyignore` |
 | SonarQube | Analyse statique et Quality Gate | `Jenkinsfile`; `platform/ansible/roles/sonar_config/tasks/main.yml` |
 | Nexus | Dépôt de snapshots/releases Maven | `ci/maven-settings.xml`; `platform/ansible/roles/nexus_config/tasks/main.yml` |
 | Docker | Image applicative et outils du build Jenkins | `Dockerfile`; `platform/ansible/roles/devops_stack/files/jenkins/Dockerfile` |
@@ -482,6 +483,29 @@ git add . && git commit -m "feat: description de la feature" && git push -u orig
 
 Le guide complet (backend Terraform, secrets, AWS, Ansible, GitOps, validations et suppression d'un environnement) se trouve dans [docs/GUIDE-EXECUTION.md](docs/GUIDE-EXECUTION.md).
 
+## Sécurité
+
+| Contrôle | Étape | Comportement |
+|---|---|---|
+| Gitleaks (historique complet) | 4a | Bloquant : aucun secret ne doit entrer dans Git. |
+| Trivy FS (dépendances, IaC) | 4b | Rapport `trivy-fs.txt`. |
+| SonarQube + Quality Gate | 5–6 | Bloquant. |
+| Trivy image (`--severity CRITICAL --ignore-unfixed --ignorefile .trivyignore`) | 9 | Rapport sur `feature/*`/`develop`; **bloquant** (`--exit-code 1`) sur `release/*` et `main`. |
+| OWASP ZAP (passif) | 14b | Rapport après déploiement. |
+
+**Dépendances corrigées** : Spring Boot 2.7.6 → 2.7.18, SnakeYAML 2.2 (CVE-2022-1471), Tomcat 9.0.121 (7 CVE critiques). Avec ces mises à jour et l'acceptation de risque ci-dessous, le scan strict de l'image renvoie le code **0**.
+
+### Acceptation de risque Trivy
+
+Deux CVE critiques restent dans Spring Framework 5.3.31 (dernière ligne compatible Spring Boot 2.7). Leur correction exige Spring 6/7, donc Spring Boot 3+ (Java 17, migration `javax` → `jakarta`). Elles sont déclarées dans [`.trivyignore`](.trivyignore), archivé avec les rapports de chaque build :
+
+| CVE | Composant | Classe vulnérable | Pourquoi l'application n'est pas exposée | Expiration |
+|---|---|---|---|---|
+| CVE-2016-1000027 | `spring-web` 5.3.31 | `HttpInvokerServiceExporter` (désérialisation Java) | Aucune utilisation de Spring Remoting/HttpInvoker dans `src/`; API REST JSON uniquement. | 2027-03-31 |
+| CVE-2026-47884 | `spring-webmvc` 5.3.31 | `XsltView` (vues XSLT) | Aucune vue XSLT ni fichier `.xsl` dans `src/`; dashboard statique. | 2027-03-31 |
+
+**Plan de correction** : migration vers Spring Boot 3 (amélioration n°1 du rapport), puis suppression des deux entrées de `.trivyignore`. Les entrées expirent le 31/03/2027 : après cette date, Trivy les signale de nouveau et le mode strict bloque `main` et `release/*`, ce qui impose une réévaluation. Si une nouvelle utilisation de ces classes apparaît dans le code, l'acceptation devient caduque.
+
 ## Structure du projet
 
 ```
@@ -489,6 +513,7 @@ IGL5-G2-EventsProjetcs
 ├── pom.xml
 ├── Jenkinsfile                             # pipeline CI/CD unique
 ├── Dockerfile
+├── .trivyignore                            # acceptation de risque Trivy (expire 2027-03-31)
 ├── ci/maven-settings.xml
 ├── docs/
 │   ├── dashboard.png

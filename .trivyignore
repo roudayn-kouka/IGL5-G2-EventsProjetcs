@@ -1,0 +1,26 @@
+# =============================================================================
+#  Acceptation de risque Trivy (étape 9 « Scan image · Trivy », mode strict)
+#  Chaque entrée expire le 2027-03-31 : passé cette date, Trivy la signale de
+#  nouveau et le mode strict bloque, ce qui force une réévaluation.
+#  Détail et plan de correction : docs/RAPPORT-REALISATION.md, README (Sécurité).
+# =============================================================================
+
+# Composant : org.springframework:spring-web 5.3.31 (géré par Spring Boot 2.7.18)
+# Classe vulnérable : org.springframework.remoting.httpinvoker.HttpInvokerServiceExporter
+#   (désérialisation Java de données non fiables via readRemoteInvocation)
+# Preuve de non-utilisation : aucune occurrence de HttpInvoker, RemoteInvocation ni
+#   org.springframework.remoting dans src/ (grep vide); l'API expose uniquement des
+#   contrôleurs REST JSON (@RestController).
+# Correction réelle : Spring Framework 6 via Spring Boot 3 (Java 17, javax -> jakarta),
+#   amélioration n°1 du rapport.
+CVE-2016-1000027 exp:2027-03-31
+
+# Composant : org.springframework:spring-webmvc 5.3.31 (géré par Spring Boot 2.7.18)
+# Classe vulnérable : org.springframework.web.servlet.view.xslt.XsltView
+#   (exécution de code par limitation de chemin insuffisante dans les vues XSLT)
+# Preuve de non-utilisation : aucune occurrence de XsltView, XsltViewResolver ni de
+#   fichier .xsl/.xslt dans src/ (grep vide); aucune vue serveur, le dashboard est
+#   une page statique qui consomme l'API REST.
+# Correction réelle : Spring Framework 7.0.9+ via la montée de version Spring Boot
+#   (Spring Boot 3 puis 4), amélioration n°1 du rapport.
+CVE-2026-47884 exp:2027-03-31

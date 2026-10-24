@@ -203,6 +203,7 @@ pipeline {
                       docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
                         -v "\$WORKSPACE:/reports" -v trivy-cache:/root/.cache ${TRIVY_IMAGE} image \
                         --severity CRITICAL --ignore-unfixed --exit-code ${exitCode} \
+                        --ignorefile /reports/.trivyignore \
                         --format table --output /reports/trivy-image.txt ${IMAGE}
                     """
                     sh 'cat trivy-image.txt'
@@ -367,7 +368,7 @@ EOF
     post {
         always {
             archiveArtifacts allowEmptyArchive: true,
-                             artifacts: 'trivy-*.txt, gitleaks-report.json, target/site/jacoco/**'
+                             artifacts: 'trivy-*.txt, .trivyignore, gitleaks-report.json, target/site/jacoco/**'
             sh 'docker image rm -f "$IMAGE" >/dev/null 2>&1 || true'
         }
         success {

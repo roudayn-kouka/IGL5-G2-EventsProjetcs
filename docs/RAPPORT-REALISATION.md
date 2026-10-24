@@ -37,9 +37,9 @@ Le guide opérationnel unifié est [docs/GUIDE-EXECUTION.md](GUIDE-EXECUTION.md)
 
 | Contrôle | Commande / outil | Résultat |
 |---|---|---|
-| Maven | `./mvnw -B clean verify` (JDK 25) | **BUILD SUCCESS**, 73 tests, 0 échec. JAR : Spring Boot 2.7.18, SnakeYAML 2.2. |
+| Maven | `./mvnw -B clean verify` (JDK 25) | **BUILD SUCCESS**, 73 tests, 0 échec. JAR : Spring Boot 2.7.18, SnakeYAML 2.2, Tomcat 9.0.121. |
 | Docker | `docker build -t events-app:local .` | Image construite (345 Mo, Alpine 3.24, JRE 17, non-root). |
-| Trivy image | `trivy image --severity CRITICAL --ignore-unfixed` (0.57.1) | **9 CRITICAL corrigeables** restantes, 0 dans la couche OS (détail ci-dessous). |
+| Trivy image (strict, comme l'étape 9) | `trivy image --severity CRITICAL --ignore-unfixed --exit-code 1 --ignorefile /reports/.trivyignore` (0.56.2) | **Code de sortie 0**. Total 0 CRITICAL; 2 CVE masquées par `.trivyignore` (vérifié avec `--show-suppressed`). Avant correction : 9 CRITICAL. |
 | Groovy | `npm-groovy-lint --failon error Jenkinsfile` | 0 erreur, 28 avertissements, 76 infos (style). |
 | Terraform | `terraform fmt -check -recursive`, `init -backend=false`, `validate` (1.9.8) | Format OK; « The configuration is valid ». |
 | Ansible | `ansible-playbook site.yml --syntax-check` (ansible-core 2.17) | OK. `ansible-inventory` confirme que `runtime.yml` fournit `argocd_server`/`apps_domain`; rendu JCasC : YAML valide, `GITOPS_BRANCH=gitops`, `excludes('gitops')`. |
@@ -50,18 +50,24 @@ Le guide opérationnel unifié est [docs/GUIDE-EXECUTION.md](GUIDE-EXECUTION.md)
 | Références obsolètes | `grep -r "Events-Platform"` (arbre + branche `gitops`) | Aucune. Seuls les messages de l'historique importé l'évoquent. |
 | Provisionnement AWS / cluster | — | Non exécuté (hors autorisation). |
 
-### Trivy : CRITICAL restantes et correction proposée
+### Trivy : corrections et acceptation de risque
 
-| Bibliothèque (dans `app.jar`) | Version | CVE | Corrigée dans | Origine |
+Le premier scan après Spring Boot 2.7.18 / SnakeYAML 2.2 remontait 9 CRITICAL corrigeables, toutes dans `app.jar`.
+
+| Bibliothèque | Version | CVE | Traitement |
+|---|---|---|---|
+| `tomcat-embed-core` | 9.0.83 → **9.0.121** | CVE-2025-24813, CVE-2026-41293, CVE-2026-43512, CVE-2026-43515, CVE-2026-65182, CVE-2026-65905, CVE-2026-68525 | **Corrigées** : `<tomcat.version>9.0.121</tomcat.version>` (commit `fix(deps): Tomcat 9.0.121`). |
+| `spring-web` | 5.3.31 | CVE-2016-1000027 | **Risque accepté** jusqu'au 2027-03-31 (`.trivyignore`). |
+| `spring-webmvc` | 5.3.31 | CVE-2026-47884 | **Risque accepté** jusqu'au 2027-03-31 (`.trivyignore`). |
+
+**Acceptation de risque.**
+
+| CVE | Classe vulnérable | Justification | Expiration | Plan de correction |
 |---|---|---|---|---|
-| `tomcat-embed-core` | 9.0.83 | CVE-2025-24813 et 6 CVE 2026 (coyote/HTTP2, authentification digest/FORM, contraintes de sécurité) | 9.0.121 (branche 9.0.x) | Version gérée par Spring Boot 2.7.18 (dernière 2.7 OSS) |
-| `spring-web` | 5.3.31 | CVE-2016-1000027 (`HttpInvokerServiceExporter`) | 6.0.0 | Spring Framework 5.3 |
-| `spring-webmvc` | 5.3.31 | CVE-2026-47884 (`XsltView`) | 7.0.9 | Spring Framework 5.3 |
+| CVE-2016-1000027 | `org.springframework.remoting.httpinvoker.HttpInvokerServiceExporter` | Aucune occurrence de `HttpInvoker`, `RemoteInvocation` ni `org.springframework.remoting` dans `src/`; seule une API REST JSON est exposée. | `exp:2027-03-31` | Spring Boot 3 / Spring 6 (amélioration n°1 du rapport). |
+| CVE-2026-47884 | `org.springframework.web.servlet.view.xslt.XsltView` | Aucune occurrence de `XsltView`/`XsltViewResolver`, aucun fichier `.xsl`/`.xslt`; le dashboard est statique. | `exp:2027-03-31` | Spring Boot 3 puis 4 (Spring 7.0.9+), même chantier. |
 
-**Correction minimale proposée (non appliquée)** :
-
-1. `pom.xml` : `<tomcat.version>9.0.121</tomcat.version>` dans `<properties>`. Testé localement avec `-Dtomcat.version=9.0.121` : 73 tests verts, Trivy passe de 9 à **2** CRITICAL.
-2. Les deux CVE Spring ne sont corrigées que dans Spring 6/7, donc Spring Boot 3/4 et Java 17+ (migration `javax` → `jakarta` hors périmètre). L'application n'utilise ni `HttpInvokerServiceExporter` ni `XsltView` (`grep` vide dans `src/`). Proposition : un fichier `.trivyignore` qui documente ces deux identifiants avec leur justification, sinon le mode strict (étape 9 sur `release/*` et `main`) bloquera.
+Le correctif réel exige Spring 6/7, donc Java 17 et la migration `javax` → `jakarta`, hors du périmètre de cette itération. L'étape 9 passe `--ignorefile /reports/.trivyignore` et archive `.trivyignore` avec `trivy-image.txt` : chaque build garde la trace de l'acceptation. À l'expiration, Trivy signale de nouveau ces CVE et le mode strict bloque `main` et `release/*`.
 
 ## Ce qui reste manuel
 
@@ -69,13 +75,14 @@ Le guide opérationnel unifié est [docs/GUIDE-EXECUTION.md](GUIDE-EXECUTION.md)
 2. Créer et renseigner localement les fichiers de secrets (`platform/terraform/terraform.tfvars`, `platform/terraform/backend.hcl`, Ansible Vault et `.env`). Le jeton GitHub doit avoir les portées `repo` et `admin:repo_hook`.
 3. Examiner le plan et les coûts AWS, puis demander/obtenir l'autorisation avant bootstrap, `apply`, configuration de l'EC2 ou interaction avec le cluster.
 4. Lors de la première configuration, enregistrer immédiatement le jeton SonarQube Jenkins affiché une seule fois et générer/enregistrer le jeton du compte Argo CD Jenkins.
-5. Décider de la correction Trivy (Tomcat 9.0.121 + `.trivyignore` justifié), puis valider le comportement des conteneurs et des ressources sur un cluster de test.
+5. Avant le 31/03/2027 : migrer vers Spring Boot 3 et retirer les entrées de `.trivyignore` (ou réévaluer et prolonger explicitement). Valider le comportement des conteneurs et des ressources sur un cluster de test.
 
 ## Index « où trouver quoi »
 
 | Élément | Chemin |
 |---|---|
 | Jenkinsfile, `ownerOf()` et pipeline 17 étapes | `Jenkinsfile` |
+| Acceptation de risque Trivy | `.trivyignore` |
 | Métriques métier | `src/main/java/tn/fst/eventsproject/config/BusinessMetricsConfig.java` |
 | Classes de test (13) | `src/test/java/tn/fst/eventsproject/controllers/` et `src/test/java/tn/fst/eventsproject/services/`; détail dans `README.md` |
 | Webhook GitHub → Jenkins (création/idempotence) | `platform/ansible/roles/github_webhook/tasks/main.yml`; appel dans `platform/ansible/site.yml`; URL dans `platform/ansible/group_vars/devops/vars.yml` |
