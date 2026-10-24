@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.7.6</version>
+        <version>2.7.18</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>tn.fst</groupId>
@@ -22,12 +22,14 @@
         <java.version>1.8</java.version>
         <!--
             Versions surchargées pour compiler/tester avec un JDK récent (17 -> 26) :
-            - Lombok 1.18.24 (version par défaut de Boot 2.7.6) ne fonctionne pas avec les JDK récents
+            - Lombok 1.18.24 (version par défaut de Boot 2.7) ne fonctionne pas avec les JDK récents
             - Byte Buddy (utilisé par Mockito et Hibernate) doit connaître la version du JDK
+            - SnakeYAML 2.x corrige CVE-2022-1471 (critique, 1.30 par défaut dans Boot 2.7)
         -->
         <lombok.version>1.18.46</lombok.version>
         <byte-buddy.version>1.17.7</byte-buddy.version>
         <jacoco.version>0.8.15</jacoco.version>
+        <snakeyaml.version>2.2</snakeyaml.version>
     </properties>
     <dependencies>
         <dependency>
