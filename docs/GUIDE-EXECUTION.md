@@ -1,4 +1,4 @@
-# Guide d'exécution — plateforme Events
+# Guide d'exécution — dépôt unique Events
 
 Ce guide suit les fichiers présents dans ce dépôt. Les commandes AWS qui créent ou détruisent des ressources doivent être exécutées par une personne autorisée, après examen du plan et des coûts. Elles n'ont pas été lancées pendant la réalisation.
 
@@ -12,10 +12,17 @@ Les commandes shell supposent Linux, macOS, WSL ou Git Bash avec GNU Make et Bas
 - Clé publique SSH locale correspondant à `ssh_public_key_path` dans les variables Terraform.
 - Comptes/jetons de l'équipe pour GitHub, SonarQube et Slack. Le jeton GitHub doit inclure les portées `repo` et `admin:repo_hook` pour créer le webhook du dépôt.
 
-Depuis la racine du dépôt plateforme :
+Depuis la racine du dépôt unique :
 
 ```bash
+cd platform
 make help
+```
+
+Le dépôt a deux historiques : `main`/`develop`/`feature/*` (code + `platform/`) et la branche orpheline `gitops` (uniquement `envs/<env>/`). La branche `gitops` doit être poussée **avant** `make apply` : l'ApplicationSet `events-environments` la lit dès l'amorçage d'Argo CD.
+
+```bash
+git push origin gitops
 ```
 
 ## 2. Préparer le backend Terraform distant
@@ -54,7 +61,18 @@ Renseignez l'adresse IP d'administration au format CIDR, le mot de passe Grafana
 make init
 ```
 
-`admin_cidr` protège l'accès SSH à l'EC2 DevOps et limite l'endpoint public de l'API EKS à l'adresse d'administration. Remplacez-le par votre adresse réelle au format `/32`; ne l'élargissez pas à `0.0.0.0/0`. La sortie de l'EC2 est limitée à DNS du VPC et aux ports HTTP/HTTPS nécessaires aux dépôts et intégrations.
+`admin_cidr` protège l'accès SSH à l'EC2 DevOps et limite l'endpoint public de l'API EKS à l'adresse d'administration. Remplacez-le par votre adresse réelle au format `/32`; ne l'élargissez pas à `0.0.0.0/0`. L'endpoint privé EKS est aussi activé (`cluster_endpoint_private_access = true`).
+
+Si l'IP publique d'administration change, mettez à jour `admin_cidr` dans `terraform/terraform.tfvars` avec la nouvelle IP au format `/32`, puis appliquez la configuration. Si l'API EKS est injoignable depuis la machine d'administration, utilisez l'apply sans rafraîchir l'état distant, configurez le kubeconfig, puis vérifiez les nœuds :
+
+```bash
+# Depuis platform/
+terraform -chdir=terraform apply -refresh=false
+make kubeconfig
+kubectl get nodes
+```
+
+Ne désactivez pas l'accès privé et ne remplacez pas le CIDR par une règle ouverte. Si `kubectl get nodes` échoue encore, vérifiez l'IP/CIDR, le contexte AWS et la connectivité avant toute nouvelle tentative.
 
 ## 3. Vérifier puis créer l'infrastructure
 
@@ -90,7 +108,13 @@ Argo CD déploie l'ingress et le monitoring depuis le dépôt; le service Argo C
 make post-apply
 ```
 
-Le script attend au maximum 900 secondes, résout le NLB public en IPv4, puis renseigne `argocd_server`, `apps_domain`, l'hôte Grafana et les hôtes staging/prod. Il affiche les URL, sans créer de commit ni pousser de modification. Pour simuler les mises à jour sans écrire les fichiers :
+Le script attend au maximum 900 secondes, résout le NLB public en IPv4, puis écrit `argocd_server` et `apps_domain` dans `ansible/group_vars/devops/runtime.yml`, ignoré par Git et chargé automatiquement par Ansible. Il met aussi à jour `host` dans `envs/staging/values.yaml` et `envs/prod/values.yaml` de la branche `gitops`, dans un worktree temporaire (la branche courante et `main` ne sont pas touchées), puis crée un commit local sans push. Publiez-le ensuite :
+
+```bash
+git push origin gitops
+```
+
+Aucun fichier suivi de `main` n'est modifié : `runtime.yml` est ignoré par Git, et Grafana n'a pas d'ingress. Grafana se consulte en port-forward (section 6). Le délai d'attente est réglable :
 
 ```bash
 POST_APPLY_TIMEOUT_SECONDS=30 make post-apply
@@ -162,11 +186,19 @@ kubectl -n ingress-nginx get service ingress-nginx-controller
 kubectl -n monitoring get pods
 ```
 
-La StorageClass `gp3` est chiffrée et provisionnée par EBS CSI avec `WaitForFirstConsumer` et `reclaimPolicy: Delete`. Le chart applicatif expose `/events/actuator/health/readiness` et `/events/actuator/prometheus`. Les règles Prometheus sont dans `gitops/platform/monitoring-config/prometheus-rules.yaml`; le dashboard Grafana est dans `gitops/platform/monitoring-config/grafana-dashboard-configmap.yaml`.
+La StorageClass `gp3` est chiffrée et provisionnée par EBS CSI avec `WaitForFirstConsumer` et `reclaimPolicy: Delete`; son Application cluster-scope est déclarée dans `platform/gitops/platform/apps/15-ebs-storageclass.yaml` et incluse par l'application racine. Le chart applicatif expose `/events/actuator/health/readiness` et `/events/actuator/prometheus`. Les règles Prometheus sont dans `platform/gitops/platform/monitoring-config/prometheus-rules.yaml`; le dashboard Grafana est dans `platform/gitops/platform/monitoring-config/grafana-dashboard-configmap.yaml`.
+
+Grafana n'a pas de nom d'hôte dynamique à committer. Pour y accéder localement :
+
+```bash
+make grafana-ui
+```
+
+Puis ouvrez `http://localhost:3000`; interrompez le port-forward avec `Ctrl+C`.
 
 ## 7. Lancer localement l'application
 
-Depuis le dépôt applicatif, construire d'abord le JAR testé, puis démarrer Compose :
+Depuis la racine du dépôt, construire d'abord le JAR testé, puis démarrer Compose :
 
 ```bash
 cp .env.example .env
@@ -189,7 +221,7 @@ Le JAR est nécessaire au build Docker et n'est pas commité. Le fichier `.env` 
 
 ## 8. Exécuter le pipeline sur une feature
 
-Dans le dépôt applicatif, créez la branche depuis `develop`, validez localement puis poussez-la :
+Depuis la racine du dépôt, créez la branche depuis `develop`, validez localement puis poussez-la :
 
 ```bash
 git switch develop
@@ -199,11 +231,34 @@ git switch -c feature/ma-feature
 git push -u origin feature/ma-feature
 ```
 
-Jenkins détecte la branche. Les étapes 1 à 10 construisent, testent et publient; la promotion GitOps met à jour `gitops/envs/ma-feature/`; Argo CD crée l'environnement correspondant. Une Pull Request de feature doit viser `develop` et ne déploie pas.
+Jenkins détecte la branche. Les étapes 1 à 10 construisent, testent et publient; la promotion GitOps met à jour `envs/ma-feature/` sur la branche `gitops`; Argo CD crée l'environnement correspondant. Une Pull Request de feature doit viser `develop` et ne déploie pas. La branche `gitops` ne contient pas de Jenkinsfile et est explicitement exclue du Multibranch, afin que ses commits n'entraînent pas de nouvelle build.
+
+### Supprimer un environnement de feature (après fusion dans `develop`)
+
+La suppression se fait sur la branche `gitops`, jamais sur `main` :
+
+```bash
+git fetch origin gitops
+git switch gitops
+git pull --rebase origin gitops
+git rm -r envs/<nom-feature>
+git commit -m "chore(gitops): suppression de l'environnement <nom-feature>"
+git push origin gitops
+git switch -          # retour à la branche de travail
+```
+
+L'ApplicationSet ne trouve plus `envs/<nom-feature>/config.json` : il supprime l'Application `events-<nom-feature>`, et son finalizer supprime les ressources du namespace. Vérification :
+
+```bash
+kubectl -n argocd get applications
+kubectl get namespace events-<nom-feature>   # disparaît une fois la suppression terminée
+```
+
+Ne supprimez jamais `envs/staging` ni `envs/prod`. Pour annuler une suppression, `git revert` du commit sur `gitops` recrée l'environnement.
 
 ## 9. Contrôles locaux sans action AWS
 
-Depuis la plateforme :
+Depuis le dépôt unique, les commandes d'infrastructure s'exécutent depuis `platform/` :
 
 ```bash
 terraform -chdir=terraform fmt -check -recursive
@@ -214,19 +269,24 @@ ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --syntax-check
 helm lint gitops/charts/events-app -f gitops/charts/events-app/values-review.yaml
 helm lint gitops/charts/events-app -f gitops/charts/events-app/values-staging.yaml
 helm lint gitops/charts/events-app -f gitops/charts/events-app/values-prod.yaml
+# Rendu avec les valeurs réelles de la branche gitops (exemple staging)
+git show gitops:envs/staging/values.yaml > /tmp/staging-values.yaml
+helm template events-staging gitops/charts/events-app -n events-staging   -f gitops/charts/events-app/values-staging.yaml -f /tmp/staging-values.yaml
+bash -n scripts/*.sh && shellcheck scripts/*.sh
 ```
 
-Depuis l'application :
+Depuis l'application (racine du dépôt) :
 
 ```bash
+cd ..
 ./mvnw -B clean verify
 docker build -t events-app:local .
 ```
 
-Depuis chacun des deux dépôts, Gitleaks vérifie aussi l'historique Git local sans afficher les valeurs détectées :
+Depuis la racine du dépôt unique, Gitleaks vérifie l'historique complet sans afficher les valeurs détectées :
 
 ```bash
-docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 detect --source /repo --redact --no-banner
+docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 detect --source /repo --log-opts="--all" --redact --no-banner
 ```
 
 `terraform init -backend=false`, les vérifications de syntaxe, les tests et le build local ne provisionnent pas d'infrastructure. `terraform plan`, la configuration Ansible sur l'EC2, les appels Argo CD à un cluster réel et toute commande `apply`/`destroy` sont hors validation locale et nécessitent les autorisations correspondantes.
