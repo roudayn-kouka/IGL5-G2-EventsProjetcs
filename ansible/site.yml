@@ -9,4 +9,6 @@
     - common        # paquets, fuseau horaire, réglages noyau SonarQube
     - docker        # Docker Engine + Compose
     - devops_stack  # Caddy (HTTPS) + Jenkins (JCasC) + Nexus + SonarQube/PostgreSQL
+    - sonar_config  # SonarQube prêt, mot de passe, webhook Jenkins et jeton d'analyse
+    - github_webhook  # webhook push/pull_request vers Jenkins
     - nexus_config  # mot de passe admin, désactivation de l'accès anonyme
