@@ -25,11 +25,13 @@
             - Lombok 1.18.24 (version par défaut de Boot 2.7) ne fonctionne pas avec les JDK récents
             - Byte Buddy (utilisé par Mockito et Hibernate) doit connaître la version du JDK
             - SnakeYAML 2.x corrige CVE-2022-1471 (critique, 1.30 par défaut dans Boot 2.7)
+            - Tomcat 9.0.121 corrige 7 CVE critiques de la 9.0.83 fournie par Boot 2.7.18
         -->
         <lombok.version>1.18.46</lombok.version>
         <byte-buddy.version>1.17.7</byte-buddy.version>
         <jacoco.version>0.8.15</jacoco.version>
         <snakeyaml.version>2.2</snakeyaml.version>
+        <tomcat.version>9.0.121</tomcat.version>
     </properties>
     <dependencies>
         <dependency>
