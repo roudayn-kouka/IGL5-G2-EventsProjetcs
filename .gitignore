@@ -34,3 +34,22 @@ build/
 
 # Secrets locaux Docker Compose
 .env
+
+# Terraform local state and credentials
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate*
+terraform.tfvars
+backend.hcl
+platform/terraform/backend.hcl
+platform/terraform/terraform.tfvars
+
+# Local Ansible configuration and generated runtime state
+platform/ansible/group_vars/devops/runtime.yml
+platform/ansible/group_vars/devops/vault.yml
+
+# IDE and local tooling
+.idea/
+.vscode/
+*.iml

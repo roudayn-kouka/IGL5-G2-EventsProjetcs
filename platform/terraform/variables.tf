@@ -38,9 +38,9 @@ variable "ssh_public_key_path" {
 }
 
 variable "platform_repo_url" {
-  description = "Dépôt GitOps surveillé par Argo CD"
+  description = "URL HTTPS du dépôt applicatif unique (application et plateforme)"
   type        = string
-  default     = "https://github.com/roudayn-kouka/IGL5-G2-Events-Platform.git"
+  default     = "https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git"
 }
 
 variable "github_token" {

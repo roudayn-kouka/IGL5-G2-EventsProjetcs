@@ -40,7 +40,7 @@ notifications:
       token: $slack-token
   templates:
     template.app-deployed: |
-      message: ":rocket: *{{.app.metadata.name}}* déployée — image {{range .app.status.summary.images}}`{{.}}` {{end}}— révision {{.app.status.sync.revision | trunc 7}}"
+      message: ":rocket: *{{.app.metadata.name}}* déployée — image {{range .app.status.summary.images}}`{{.}}` {{end}}— révision {{range .app.status.sync.revisions}}{{. | trunc 7}} {{end}}"
     template.app-sync-failed: |
       message: ":x: Échec de synchronisation de *{{.app.metadata.name}}* : {{.app.status.operationState.message}}"
     template.app-health-degraded: |
@@ -48,7 +48,7 @@ notifications:
   triggers:
     trigger.on-deployed: |
       - when: app.status.operationState != nil and app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
-        oncePer: app.status.sync.revision
+        oncePer: app.status.sync.revisions
         send: [app-deployed]
     trigger.on-sync-failed: |
       - when: app.status.operationState != nil and app.status.operationState.phase in ['Error', 'Failed']

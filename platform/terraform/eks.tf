@@ -9,6 +9,7 @@ module "eks" {
   cluster_name    = var.project
   cluster_version = var.cluster_version
 
+  cluster_endpoint_private_access          = true
   cluster_endpoint_public_access           = true
   cluster_endpoint_public_access_cidrs     = [var.admin_cidr]
   enable_cluster_creator_admin_permissions = true

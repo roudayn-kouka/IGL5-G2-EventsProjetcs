@@ -1,5 +1,5 @@
 # Valeurs par défaut du chart.
-# Ordre de surcharge (Argo CD) : values.yaml < values-<profil>.yaml < gitops/envs/<env>/values.yaml (écrit par Jenkins)
+# Ordre de surcharge (Argo CD) : values.yaml < values-<profil>.yaml < envs/<env>/values.yaml de la branche gitops (écrit par Jenkins)
 feature: local
 owner: equipe
 

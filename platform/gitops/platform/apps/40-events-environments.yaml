@@ -1,6 +1,6 @@
 # =============================================================================
 #  « Même pipeline, features différentes » côté déploiement :
-#  chaque dossier gitops/envs/<env>/ (écrit par Jenkins) devient AUTOMATIQUEMENT
+#  chaque dossier envs/<env>/ de la branche gitops (écrit par Jenkins) devient AUTOMATIQUEMENT
 #  une Application Argo CD  events-<env>  déployée dans son propre namespace.
 #  Supprimer le dossier => l'environnement est supprimé (finalizer).
 # =============================================================================
@@ -16,10 +16,10 @@ spec:
   goTemplateOptions: ["missingkey=error"]
   generators:
     - git:
-        repoURL: https://github.com/roudayn-kouka/IGL5-G2-Events-Platform.git
-        revision: main
+        repoURL: https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git
+        revision: gitops
         files:
-          - path: "gitops/envs/*/config.json"
+          - path: "envs/*/config.json"
   template:
     metadata:
       name: 'events-{{.path.basename}}'
@@ -35,14 +35,17 @@ spec:
         notifications.argoproj.io/subscribe.on-health-degraded.slack: igl5-g2-deploiements
     spec:
       project: events
-      source:
-        repoURL: https://github.com/roudayn-kouka/IGL5-G2-Events-Platform.git
-        targetRevision: main
-        path: gitops/charts/events-app
-        helm:
-          valueFiles:
-            - 'values-{{.profile}}.yaml'
-            - '../../envs/{{.path.basename}}/values.yaml'
+      sources:
+        - repoURL: https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git
+          targetRevision: main
+          path: platform/gitops/charts/events-app
+          helm:
+            valueFiles:
+              - 'values-{{.profile}}.yaml'
+              - '$values/envs/{{.path.basename}}/values.yaml'
+        - repoURL: https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git
+          targetRevision: gitops
+          ref: values
       destination:
         server: https://kubernetes.default.svc
         namespace: '{{.namespace}}'

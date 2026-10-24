@@ -8,9 +8,9 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/roudayn-kouka/IGL5-G2-Events-Platform.git
+    repoURL: https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git
     targetRevision: main
-    path: gitops/platform/storage-class
+    path: platform/gitops/platform/storage-class
   destination:
     server: https://kubernetes.default.svc
   syncPolicy:

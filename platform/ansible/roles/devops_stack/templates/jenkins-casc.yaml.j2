@@ -19,8 +19,9 @@ jenkins:
           - { key: ECR_REGISTRY,  value: "{{ ecr_registry }}" }
           - { key: AWS_REGION,    value: "{{ aws_region }}" }
           - { key: PLATFORM_REPO, value: "{{ platform_repo }}" }
-          - { key: ARGOCD_SERVER, value: "{{ argocd_server }}" }
-          - { key: APPS_DOMAIN,   value: "{{ apps_domain }}" }
+          - { key: GITOPS_BRANCH, value: "{{ gitops_branch }}" }
+          - { key: ARGOCD_SERVER, value: "{{ argocd_server | default('') }}" }
+          - { key: APPS_DOMAIN,   value: "{{ apps_domain | default('') }}" }
 
 credentials:
   system:
@@ -63,7 +64,8 @@ unclassified:
     tokenCredentialId: slack-token
     room: "#igl5-g2-ci"
 
-# Le job Multibranch est lui aussi du code : il découvre toutes les branches GitFlow
+# Le job Multibranch est lui aussi du code : il découvre toutes les branches GitFlow,
+# sauf gitops (écrite par Jenkins lui-même : la construire créerait une boucle).
 jobs:
   - script: >
       multibranchPipelineJob('events-project') {
@@ -74,6 +76,8 @@ jobs:
             repoOwner('{{ github_owner }}')
             repository('{{ app_repo }}')
             scanCredentialsId('github-credentials')
+            includes('*')
+            excludes('{{ gitops_branch }}')
           }
         }
         orphanedItemStrategy {

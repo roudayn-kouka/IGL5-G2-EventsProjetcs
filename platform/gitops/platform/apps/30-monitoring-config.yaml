@@ -9,9 +9,9 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/roudayn-kouka/IGL5-G2-Events-Platform.git
+    repoURL: https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git
     targetRevision: main
-    path: gitops/platform/monitoring-config
+    path: platform/gitops/platform/monitoring-config
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring

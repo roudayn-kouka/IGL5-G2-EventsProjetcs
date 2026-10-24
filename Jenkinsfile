@@ -15,7 +15,7 @@
 //    PR-*           -> intégration continue seulement
 //
 //  Variables globales (injectées par Ansible via Jenkins Configuration as Code) :
-//    NEXUS_URL, ECR_REGISTRY, AWS_REGION, PLATFORM_REPO, ARGOCD_SERVER, APPS_DOMAIN
+//    NEXUS_URL, ECR_REGISTRY, AWS_REGION, PLATFORM_REPO, GITOPS_BRANCH, ARGOCD_SERVER, APPS_DOMAIN
 //  Credentials : nexus-credentials, github-credentials, argocd-token, sonar-token (serveur « sonarqube »)
 // =============================================================================
 
@@ -240,12 +240,17 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'github-credentials',
                                                   usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
-                    // Jenkins ne déploie pas : il décrit l'état voulu dans le dépôt plateforme.
+                    // Jenkins ne déploie pas : il décrit l'état voulu sur la branche gitops.
                     // L'ApplicationSet Argo CD crée automatiquement l'environnement s'il est nouveau.
                     sh '''
-                      rm -rf platform
-                      git clone --depth 20 "https://$GIT_USER:$GIT_TOKEN@github.com/$PLATFORM_REPO.git" platform
-                      ENV_DIR="platform/gitops/envs/$ENV_NAME"
+                      rm -rf gitops-work
+                      AUTH_HEADER="AUTHORIZATION: basic $(printf '%s' "$GIT_USER:$GIT_TOKEN" | base64 | tr -d '\n')"
+                      git -c http.extraheader="$AUTH_HEADER" \
+                        clone --branch "$GITOPS_BRANCH" --depth 20 "https://github.com/$PLATFORM_REPO.git" gitops-work
+                      trap 'cd "$WORKSPACE"; rm -rf gitops-work' EXIT
+                      git -C gitops-work config http.extraheader "$AUTH_HEADER"
+                      unset AUTH_HEADER
+                      ENV_DIR="gitops-work/envs/$ENV_NAME"
                       mkdir -p "$ENV_DIR"
 
                       cat > "$ENV_DIR/config.json" <<EOF
@@ -261,19 +266,28 @@ image:
 ingress:
   host: $APP_HOST
 EOF
-                      cd platform
+                      cd gitops-work
                       git config user.name  "Jenkins FST"
                       git config user.email "jenkins@fst-events.local"
-                      git add "gitops/envs/$ENV_NAME"
+                      git add "envs/$ENV_NAME"
                       git diff --cached --quiet || git commit -m "deploy($ENV_NAME): $IMAGE_TAG [build #$BUILD_NUMBER · $OWNER]"
 
                       # Plusieurs membres peuvent promouvoir en même temps : rebase puis nouvel essai
+                      PUSHED=false
                       for i in 1 2 3 4 5; do
-                        git push origin HEAD:main && break
-                        git pull --rebase origin main
+                        if git push origin "HEAD:$GITOPS_BRANCH"; then
+                          PUSHED=true
+                          break
+                        fi
+                        if [ "$i" -lt 5 ]; then
+                          git pull --rebase origin "$GITOPS_BRANCH"
+                        fi
                       done
+                      if [ "$PUSHED" != true ]; then
+                        echo "Échec du push GitOps après cinq tentatives."
+                        exit 1
+                      fi
                       git rev-parse HEAD > ../gitops-revision.txt
-                      cd .. && rm -rf platform   # le jeton GitHub ne reste pas dans l'espace de travail
                     '''
                 }
             }
@@ -290,14 +304,15 @@ EOF
                       WANTED=$(cat gitops-revision.txt)
                       for i in $(seq 1 60); do
                         J=$(argocd app get "$APP" --refresh -o json 2>/dev/null || true)
-                        REV=$(echo "$J" | jq -r '.status.sync.revision // empty')
+                        REV=$(echo "$J" | jq -r '(.status.sync.revisions // []) | join(",")')
+                        REV_MATCH=$(echo "$J" | jq -r --arg wanted "$WANTED" '(.status.sync.revisions // []) | index($wanted) != null')
                         SYNC=$(echo "$J" | jq -r '.status.sync.status // empty')
                         HEALTH=$(echo "$J" | jq -r '.status.health.status // empty')
-                        echo "[$i] $APP révision=$REV sync=$SYNC santé=$HEALTH"
-                        if [ "$REV" = "$WANTED" ] && [ "$SYNC" = "Synced" ] && [ "$HEALTH" = "Healthy" ]; then
+                        echo "[$i] $APP révisions=$REV commit-attendu=$REV_MATCH sync=$SYNC santé=$HEALTH"
+                        if [ "$REV_MATCH" = "true" ] && [ "$SYNC" = "Synced" ] && [ "$HEALTH" = "Healthy" ]; then
                           echo "Déployé et sain."; exit 0
                         fi
-                        if [ "$REV" = "$WANTED" ] && [ "$HEALTH" = "Degraded" ]; then
+                        if [ "$REV_MATCH" = "true" ] && [ "$HEALTH" = "Degraded" ]; then
                           echo "Déploiement dégradé : voir l'interface Argo CD."; exit 1
                         fi
                         sleep 10

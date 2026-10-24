@@ -7,7 +7,7 @@ metadata:
 spec:
   description: Environnements de l'application Events (features, staging, prod)
   sourceRepos:
-    - https://github.com/roudayn-kouka/IGL5-G2-Events-Platform.git
+    - https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git
   destinations:
     - server: https://kubernetes.default.svc
       namespace: "events-*"          # impossible de déployer ailleurs

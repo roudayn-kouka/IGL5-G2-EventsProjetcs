@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 AWS_REGION ?= eu-west-3
 
-.PHONY: help bootstrap-state init plan apply kubeconfig configure post-apply argocd-ui argocd-token status destroy
+.PHONY: help bootstrap-state init plan apply kubeconfig configure post-apply argocd-ui argocd-token grafana-ui status destroy
 
 help:
 	@echo "Cibles disponibles :"
@@ -32,8 +32,8 @@ configure: ## Configure Jenkins, Nexus et SonarQube via Ansible
 	@cd ansible && ansible-galaxy collection install -r requirements.yml
 	@cd ansible && ansible-playbook site.yml --ask-vault-pass
 
-post-apply: ## Découvre les adresses des NLB et met à jour les hôtes configurés
-	@echo "Découverte des NLB et mise à jour des valeurs GitOps/Ansible; pas de commit ni push."
+post-apply: ## Découvre les adresses des NLB, met à jour runtime.yml et commite les hôtes sur gitops
+	@echo "Découverte des NLB, mise à jour du runtime Ansible et commit local des hôtes sur gitops."
 	@bash scripts/post-apply.sh
 
 argocd-ui: ## Ouvre l'interface Argo CD en port-forward sur localhost:8080
@@ -43,6 +43,10 @@ argocd-ui: ## Ouvre l'interface Argo CD en port-forward sur localhost:8080
 argocd-token: ## Affiche la commande pour générer le jeton du compte Jenkins
 	@echo "Après connexion administrateur à Argo CD, générez un jeton pour l'étape 13 :"
 	@echo "argocd account generate-token --account jenkins --server localhost:8080 --grpc-web --plaintext"
+
+grafana-ui: ## Ouvre Grafana en port-forward sur localhost:3000
+	@echo "Port-forward local vers Grafana (Ctrl+C pour arrêter)."
+	@kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80
 
 status: ## Affiche les Applications Argo CD, les pods et les URL Terraform
 	@echo "Applications Argo CD :"

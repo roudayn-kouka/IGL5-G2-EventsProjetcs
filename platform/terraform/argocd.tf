@@ -1,7 +1,7 @@
 # =============================================================================
 #  Amorçage GitOps : Terraform installe UNIQUEMENT Argo CD + l'application racine.
 #  Tout le reste (ingress, monitoring, environnements Events) est déployé par Argo CD
-#  depuis le dossier gitops/ de ce dépôt (modèle « app of apps »).
+#  depuis platform/gitops/ de la branche main (modèle « app of apps »).
 # =============================================================================
 
 resource "kubernetes_namespace" "monitoring" {
@@ -50,7 +50,7 @@ resource "helm_release" "argocd" {
   depends_on = [module.eks]
 }
 
-# Application racine : Argo CD se gère lui-même à partir de gitops/platform/apps
+# Application racine : Argo CD se gère lui-même à partir de platform/gitops/platform/apps sur main.
 resource "helm_release" "argocd_root" {
   name       = "argocd-root"
   repository = "https://argoproj.github.io/argo-helm"
@@ -66,7 +66,7 @@ resource "helm_release" "argocd_root" {
         source = {
           repoURL        = var.platform_repo_url
           targetRevision = "main"
-          path           = "gitops/platform/apps"
+          path           = "platform/gitops/platform/apps"
         }
         destination = {
           server    = "https://kubernetes.default.svc"

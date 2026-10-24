@@ -33,9 +33,7 @@ spec:
               label: grafana_dashboard
               searchNamespace: ALL
           ingress:
-            enabled: true
-            ingressClassName: nginx
-            hosts: ["grafana.<IP-du-NLB>.sslip.io"]
+            enabled: false
         alertmanager:
           alertmanagerSpec:
             secrets: [alertmanager-slack]            # créé par Terraform, monté dans /etc/alertmanager/secrets/

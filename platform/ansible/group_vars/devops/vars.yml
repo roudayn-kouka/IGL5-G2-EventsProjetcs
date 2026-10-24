@@ -6,12 +6,13 @@ timezone: Africa/Tunis
 # Dépôts GitHub
 github_owner: roudayn-kouka
 app_repo: IGL5-G2-EventsProjetcs
-platform_repo: roudayn-kouka/IGL5-G2-Events-Platform
+platform_repo: roudayn-kouka/IGL5-G2-EventsProjetcs
+gitops_branch: gitops
 
 # Points d'accès utilisés par le pipeline (variables globales Jenkins)
 nexus_internal_url: http://nexus:8081
-argocd_server: ""            # DNS du NLB interne : kubectl -n argocd get svc argocd-server
-apps_domain: ""              # <IP du NLB ingress>.sslip.io
+# argocd_server et apps_domain : écrits par `make post-apply` dans runtime.yml (ignoré par Git).
+# Ne pas les définir ici : vars.yml est lu après runtime.yml (ordre alphabétique) et les écraserait.
 sonarqube_internal_url: http://sonarqube:9000
 sonar_webhook_url: http://jenkins:8080/sonarqube-webhook/
 github_webhook_url: "https://jenkins.{{ base_domain }}/github-webhook/"
