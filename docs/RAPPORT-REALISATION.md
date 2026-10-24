@@ -21,6 +21,7 @@ Le guide opérationnel unifié est [docs/GUIDE-EXECUTION.md](GUIDE-EXECUTION.md)
 - `platform/gitops/envs/` est retiré de `main` : son contenu est désormais sur la branche orpheline `gitops`, seule source lue par Argo CD.
 - La racine Argo CD pointe sur `platform/gitops/platform/apps` depuis `main`; les sources GitOps et `platform_repo_url` utilisent le dépôt unique. L'ApplicationSet charge les manifestes de déploiement depuis la branche `gitops`.
 - Ajout des scripts backend et de destruction ordonnée, du Makefile, de la branche de déploiement séparée et du guide opérationnel monorepo.
+- Nettoyage : suppression de `release.properties` (reste du plugin maven-release), des doublons importés `platform/docs/` (images et rapport v4 identiques à `docs/`) et `platform/.gitattributes`; les trois `.gitignore` de `platform/` sont regroupés dans un `.gitignore` racine unique.
 
 ### Application
 
@@ -89,7 +90,7 @@ Le correctif réel exige Spring 6/7, donc Java 17 et la migration `javax` → `j
 | Webhook SonarQube → Jenkins | `platform/ansible/roles/sonar_config/tasks/main.yml`; consommation `Jenkinsfile` |
 | Jenkins/JCasC, job Multibranch, Slack et plugins | `platform/ansible/roles/devops_stack/templates/jenkins-casc.yaml.j2`, `platform/ansible/roles/devops_stack/files/jenkins/` |
 | Terraform AWS/EKS/ECR/Argo CD | `platform/terraform/*.tf`, `platform/terraform/values/argocd.yaml.tftpl` |
-| Backend Terraform et exclusions Git | `platform/terraform/backend.hcl.example`, `platform/terraform/.gitignore`, `.gitignore` |
+| Backend Terraform et exclusions Git | `platform/terraform/backend.hcl.example`, `.gitignore` (racine, unique) |
 | Rôles Ansible | `platform/ansible/site.yml`, `platform/ansible/roles/` |
 | Chart Helm et profils Events | `platform/gitops/charts/events-app/`, branche `gitops:envs/` |
 | Application racine, StorageClass gp3 et AppProject | `platform/terraform/argocd.tf`, `platform/gitops/platform/apps/`, `platform/gitops/platform/storage-class/gp3.yaml` |
