@@ -11,6 +11,7 @@ Les commandes shell supposent Linux, macOS, WSL ou Git Bash avec GNU Make et Bas
 - `kubectl`, `dig`, `curl`, `ansible-playbook`, `ansible-galaxy`, `ansible-vault`.
 - Clé publique SSH locale correspondant à `ssh_public_key_path` dans les variables Terraform.
 - Comptes/jetons de l'équipe pour GitHub, SonarQube et Slack. Le jeton GitHub doit inclure les portées `repo` et `admin:repo_hook` pour créer le webhook du dépôt.
+- **Antivirus avec analyse HTTPS** (Avast, AVG, Kaspersky, ESET, Bitdefender…) : s'il intercepte le trafic TLS, Terraform, Ansible, Maven, kubectl, Helm ou Trivy refusent les certificats. Avant de commencer, ajoutez une exception pour ces outils ou désactivez temporairement l'analyse HTTPS (voir [Dépannage](#11-dépannage)).
 
 Depuis la racine du dépôt unique :
 
@@ -300,3 +301,26 @@ make destroy
 ```
 
 Si des load balancers subsistent ou si l'attente expire, le script s'arrête sans lancer `terraform destroy`; diagnostiquez les ressources restantes avant de relancer. Les données MySQL de staging/prod sont sur des PVC dont la StorageClass a `reclaimPolicy: Delete` : leur suppression est destructive.
+
+## 11. Dépannage
+
+### Erreurs de certificat : antivirus qui intercepte le HTTPS
+
+Certains antivirus (Avast, AVG, Kaspersky, ESET, Bitdefender…) analysent le HTTPS en se plaçant au milieu de la connexion : ils présentent leur propre certificat racine, connu de Windows et des navigateurs, mais pas de Java, Go, Python ni des conteneurs Docker.
+
+| Outil | Symptôme typique |
+|---|---|
+| Terraform | `x509: certificate signed by unknown authority` à `terraform init` (providers, modules `git::https`); `Failed to load plugin schemas` |
+| Ansible / `ansible-galaxy` / pip | `CERTIFICATE_VERIFY_FAILED` à l'installation des collections ou des paquets |
+| Maven (`./mvnw`) | `PKIX path building failed … unable to find valid certification path` |
+| kubectl / AWS CLI / Helm | `x509: certificate signed by unknown authority` vers l'API EKS ou les dépôts Helm |
+| Trivy, Gitleaks, Helm en conteneur | `tls: failed to verify certificate` au téléchargement de la base Trivy ou des modules |
+
+Diagnostic : si la variable `SSLKEYLOGFILE` ou `NODE_EXTRA_CA_CERTS` pointe vers un dossier de l'antivirus (par exemple `C:\ProgramData\Avast Software\…`), l'interception HTTPS est active.
+
+Solution, au choix :
+
+1. **Exception** dans l'antivirus pour les exécutables concernés (`terraform.exe`, `java.exe`, `python.exe`, `kubectl.exe`, `helm.exe`, Docker Desktop) ou pour les domaines utilisés (`registry.terraform.io`, `github.com`, `repo.maven.apache.org`, `galaxy.ansible.com`, `*.amazonaws.com`, `ghcr.io`, `mirror.gcr.io`). Avast : *Menu → Paramètres → Protection → Boucliers principaux → Agent Web → Activer l'analyse HTTPS* (décocher) ou *Exceptions*.
+2. **Désactivation temporaire** de l'analyse HTTPS le temps des commandes (`terraform init`, `make configure`, `./mvnw`, scans), puis réactivation.
+
+N'ajoutez jamais le certificat racine de l'antivirus au dépôt (ni dans un Dockerfile, ni dans un truststore commité) : il est propre à chaque poste. Sur les agents Jenkins (EC2 Linux), aucune interception n'existe et ces réglages ne s'appliquent pas.
