@@ -5,4 +5,4 @@ image:
   repository: 000000000000.dkr.ecr.eu-west-3.amazonaws.com/events-app
   tag: prod-0-initial
 ingress:
-  host: prod.apps.example.sslip.io
+  host: prod.<IP-du-NLB>.sslip.io

@@ -35,7 +35,7 @@ spec:
           ingress:
             enabled: true
             ingressClassName: nginx
-            hosts: ["grafana.apps.example.sslip.io"]   # remplacer par grafana.<IP du NLB>.sslip.io
+            hosts: ["grafana.<IP-du-NLB>.sslip.io"]
         alertmanager:
           alertmanagerSpec:
             secrets: [alertmanager-slack]            # créé par Terraform, monté dans /etc/alertmanager/secrets/

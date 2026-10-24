@@ -34,7 +34,7 @@ mysql:
   persistence:
     enabled: false     # review : base éphémère (emptyDir)
     size: 5Gi
-    storageClass: gp2
+    storageClass: gp3
   resources:
     requests: { cpu: 100m, memory: 256Mi }
     limits:   { cpu: 500m, memory: 512Mi }

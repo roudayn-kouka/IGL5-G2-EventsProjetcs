@@ -33,6 +33,12 @@ spec:
         {{- include "events.labels" . | nindent 8 }}
         {{- include "events.mysqlSelector" . | nindent 8 }}
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile: { type: RuntimeDefault }
       containers:
         - name: mysql
           image: {{ .Values.mysql.image }}
@@ -51,9 +57,23 @@ spec:
             periodSeconds: 10
           resources:
             {{- toYaml .Values.mysql.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           volumeMounts:
             - name: data
               mountPath: /var/lib/mysql
+            - name: mysql-run
+              mountPath: /var/run/mysqld
+            - name: tmp
+              mountPath: /tmp
+            - name: mysql-files
+              mountPath: /var/lib/mysql-files
       volumes:
         - name: data
           {{- if .Values.mysql.persistence.enabled }}
@@ -62,6 +82,12 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
+        - name: mysql-run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: mysql-files
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
