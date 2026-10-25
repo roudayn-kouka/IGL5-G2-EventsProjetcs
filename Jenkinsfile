@@ -58,5 +58,26 @@ pipeline {
         timeout(time: 5, unit: 'MINUTES') { waitForQualityGate abortPipeline: true }
       }
     }
+        stage('7 · Publication JAR (Nexus)') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'nexus-creds',
+                                          usernameVariable: 'NEXUS_USER',
+                                          passwordVariable: 'NEXUS_PASS')]) {
+          sh "mvn -B versions:set -DnewVersion=1.0.0-${env.FEATURE}-SNAPSHOT -DgenerateBackupPoms=false"
+          sh 'mvn -B -s settings-ci.xml -DskipTests deploy'
+        }
+      }
+    }
+
+    stage('8 · Image Docker') {
+      steps { sh "docker build -t events-app:${env.IMAGE_TAG} ." }
+    }
+
+    stage('9 · Scan image (Trivy)') {
+      steps {
+        sh "trivy image --severity HIGH,CRITICAL --exit-code 0 --output trivy-image.txt events-app:${env.IMAGE_TAG}"
+      }
+      post { always { archiveArtifacts artifacts: 'trivy-image.txt', allowEmptyArchive: true } }
+    }
   }
 }

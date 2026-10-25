@@ -1,0 +1,12 @@
+$s = @'
+<settings>
+  <servers>
+    <server>
+      <id>nexus</id>
+      <username>${env.NEXUS_USER}</username>
+      <password>${env.NEXUS_PASS}</password>
+    </server>
+  </servers>
+</settings>
+'@
+[System.IO.File]::WriteAllText("$PWD\settings-ci.xml", $s, (New-Object System.Text.UTF8Encoding $false))
