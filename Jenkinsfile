@@ -97,6 +97,29 @@ pipeline {
           input message: 'Promouvoir en production ?', ok: 'Promouvoir'
         }
       }
-    }     
+    }   
+        stage('12 · Promotion GitOps') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'platform-creds',
+                                          usernameVariable: 'GH_USER',
+                                          passwordVariable: 'GH_TOKEN')]) {
+          sh '''
+            rm -rf platform
+            git clone https://${GH_USER}:${GH_TOKEN}@github.com/AhlemMastouri/Events-Platform.git platform
+            cd platform
+            mkdir -p gitops/envs/${FEATURE}
+            printf 'image:\\n  repository: events-app\\n  tag: %s\\n' "${IMAGE_TAG}" > gitops/envs/${FEATURE}/values.yaml
+            git config user.email "jenkins@fst.local"
+            git config user.name "Jenkins"
+            git add .
+            git commit -m "deploy(${FEATURE}): ${IMAGE_TAG} [build #${BUILD_NUMBER}]" || echo "rien a commiter"
+            for i in 1 2 3 4 5; do
+              git push origin HEAD:main && break || git pull --rebase origin main
+            done
+          '''
+        }
+      }
+      post { always { sh 'rm -rf platform' } }
+    }  
   }
 }
