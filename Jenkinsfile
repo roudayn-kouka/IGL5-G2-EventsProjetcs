@@ -184,6 +184,20 @@ pipeline {
           }
         }
       }
+        post {
+    always {
+      withCredentials([string(credentialsId: 'slack-webhook', variable: 'SLACK_URL')]) {
+        sh '''
+          STATUS="${BUILD_STATUS:-terminé}"
+          printf '{"text":"%s : %s #%s (%s) %s"}' "${JOB_NAME}" "${FEATURE}" "${BUILD_NUMBER}" "${IMAGE_TAG}" "${BUILD_URL}" > /tmp/slack.json
+          curl -s -X POST -H 'Content-type: application/json' --data-binary @/tmp/slack.json "$SLACK_URL" || true
+          rm -f /tmp/slack.json
+        '''
+      }
+    }
+    success { echo 'Build réussi' }
+    failure { echo 'Build en échec' }
+  }
     } 
   }
 }
