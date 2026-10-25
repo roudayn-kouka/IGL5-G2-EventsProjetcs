@@ -120,6 +120,35 @@ pipeline {
         }
       }
       post { always { sh 'rm -rf platform' } }
+    }
+        stage('13 · Attente Argo CD') {
+      steps {
+        withCredentials([string(credentialsId: 'argocd-password', variable: 'ARGO_PW')]) {
+          sh '''
+            ARGO=https://host.docker.internal:8443
+            TOKEN=$(curl -sk -X POST $ARGO/api/v1/session \
+              -H "Content-Type: application/json" \
+              -d "{\\"username\\":\\"admin\\",\\"password\\":\\"$ARGO_PW\\"}" \
+              | sed -E 's/.*"token":"([^"]+)".*/\\1/')
+            if [ -z "$TOKEN" ]; then echo "Connexion Argo CD impossible"; exit 1; fi
+
+            for i in $(seq 1 60); do
+              R=$(curl -sk -H "Authorization: Bearer $TOKEN" \
+                "$ARGO/api/v1/applications/events-${FEATURE}?refresh=hard")
+              if echo "$R" | grep -q "${IMAGE_TAG}" \
+                 && echo "$R" | grep -q '"sync":{"status":"Synced"' \
+                 && echo "$R" | grep -q '"health":{"status":"Healthy"'; then
+                echo "Synced + Healthy avec ${IMAGE_TAG}"
+                exit 0
+              fi
+              echo "attente... ($i/60)"
+              sleep 10
+            done
+            echo "Delai depasse"
+            exit 1
+          '''
+        }
+      }
     }  
   }
 }
