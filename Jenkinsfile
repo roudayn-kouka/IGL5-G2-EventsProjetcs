@@ -121,20 +121,24 @@ pipeline {
       }
       post { always { sh 'rm -rf platform' } }
     }
+        
         stage('13 · Attente Argo CD') {
       steps {
         withCredentials([string(credentialsId: 'argocd-password', variable: 'ARGO_PW')]) {
           sh '''
             ARGO=https://host.docker.internal:8443
-            TOKEN=$(curl -sk -X POST $ARGO/api/v1/session \
-              -H "Content-Type: application/json" \
-              -d "{\\"username\\":\\"admin\\",\\"password\\":\\"$ARGO_PW\\"}" \
-              | sed -E 's/.*"token":"([^"]+)".*/\\1/')
-            if [ -z "$TOKEN" ]; then echo "Connexion Argo CD impossible"; exit 1; fi
+            printf '{"username":"admin","password":"%s"}' "$ARGO_PW" > /tmp/login.json
+            RESP=$(curl -sk -X POST "$ARGO/api/v1/session" -H "Content-Type: application/json" --data-binary @/tmp/login.json)
+            rm -f /tmp/login.json
+            TOKEN=$(echo "$RESP" | sed -n 's/.*"token":"\\([^"]*\\)".*/\\1/p')
+            if [ -z "$TOKEN" ]; then
+              echo "Connexion Argo CD impossible : $(echo "$RESP" | cut -c1-120)"
+              exit 1
+            fi
+            echo "Jeton Argo CD obtenu"
 
             for i in $(seq 1 60); do
-              R=$(curl -sk -H "Authorization: Bearer $TOKEN" \
-                "$ARGO/api/v1/applications/events-${FEATURE}?refresh=hard")
+              R=$(curl -sk -H "Authorization: Bearer $TOKEN" "$ARGO/api/v1/applications/events-${FEATURE}?refresh=hard")
               if echo "$R" | grep -q "${IMAGE_TAG}" \
                  && echo "$R" | grep -q '"sync":{"status":"Synced"' \
                  && echo "$R" | grep -q '"health":{"status":"Healthy"'; then
@@ -149,6 +153,6 @@ pipeline {
           '''
         }
       }
-    }  
+    } 
   }
 }
