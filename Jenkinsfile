@@ -89,6 +89,14 @@ pipeline {
           rm -f /tmp/events-app.tar
         """
       }
+    }
+        stage('11 · Approbation') {
+      when { branch 'main' }
+      steps {
+        timeout(time: 24, unit: 'HOURS') {
+          input message: 'Promouvoir en production ?', ok: 'Promouvoir'
+        }
+      }
     }     
   }
 }
