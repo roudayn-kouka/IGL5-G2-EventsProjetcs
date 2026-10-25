@@ -79,7 +79,7 @@ pipeline {
       }
       post { always { archiveArtifacts artifacts: 'trivy-image.txt', allowEmptyArchive: true } }
     }
-          stage('10 · Envoi image (kind)') {
+         stage('10 · Envoi image (kind)') {
       steps {
         sh """
           docker save events-app:${env.IMAGE_TAG} -o /tmp/events-app.tar
