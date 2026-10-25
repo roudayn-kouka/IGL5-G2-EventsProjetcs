@@ -79,14 +79,16 @@ pipeline {
       }
       post { always { archiveArtifacts artifacts: 'trivy-image.txt', allowEmptyArchive: true } }
     }
-        stage('10 · Envoi image (kind)') {
+          stage('10 · Envoi image (kind)') {
       steps {
         sh """
           docker save events-app:${env.IMAGE_TAG} -o /tmp/events-app.tar
-          kind load image-archive /tmp/events-app.tar --name fst-events
+          docker cp /tmp/events-app.tar fst-events-control-plane:/events-app.tar
+          docker exec fst-events-control-plane ctr -n k8s.io images import --all-platforms /events-app.tar
+          docker exec fst-events-control-plane rm -f /events-app.tar
           rm -f /tmp/events-app.tar
         """
       }
-    }
+    }     
   }
 }
