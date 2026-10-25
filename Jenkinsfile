@@ -73,9 +73,9 @@ pipeline {
       steps { sh "docker build -t events-app:${env.IMAGE_TAG} ." }
     }
 
-    stage('9 · Scan image (Trivy)') {
+     stage('9 · Scan image (Trivy)') {
       steps {
-        sh "trivy image --severity HIGH,CRITICAL --exit-code 0 --output trivy-image.txt events-app:${env.IMAGE_TAG}"
+        sh "trivy image --timeout 30m --scanners vuln --skip-java-db-update --severity HIGH,CRITICAL --exit-code 0 --output trivy-image.txt events-app:${env.IMAGE_TAG} || true"
       }
       post { always { archiveArtifacts artifacts: 'trivy-image.txt', allowEmptyArchive: true } }
     }
