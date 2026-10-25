@@ -145,6 +145,16 @@
                 </executions>
             </plugin>
         </plugins>
+             <distributionManagement>
+  <snapshotRepository>
+    <id>nexus</id>
+    <url>http://nexus:8081/repository/maven-snapshots/</url>
+  </snapshotRepository>
+  <repository>
+    <id>nexus</id>
+    <url>http://nexus:8081/repository/maven-releases/</url>
+  </repository>
+</distributionManagement>
     </build>
 
 </project>
