@@ -153,6 +153,37 @@ pipeline {
           '''
         }
       }
+    }
+        stage('14 · Tests post-déploiement') {
+      parallel {
+        stage('14a · Smoke tests') {
+          steps {
+            sh '''
+              for i in $(seq 1 12); do
+                CODE=$(curl -s -o /dev/null -w "%{http_code}" http://host.docker.internal:8083/events/logistics || true)
+                echo "HTTP $CODE"
+                if [ "$CODE" = "200" ]; then
+                  echo "Application operationnelle"
+                  exit 0
+                fi
+                sleep 10
+              done
+              echo "L'application ne repond pas"
+              exit 1
+            '''
+          }
+        }
+        stage('14b · DAST (OWASP ZAP)') {
+          steps {
+            sh '''
+              docker run --rm --add-host=host.docker.internal:host-gateway \
+                ghcr.io/zaproxy/zaproxy:stable \
+                zap-baseline.py -t http://host.docker.internal:8083/events/logistics \
+                -m 2 -I || true
+            '''
+          }
+        }
+      }
     } 
   }
 }
