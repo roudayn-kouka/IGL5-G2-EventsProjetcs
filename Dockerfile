@@ -1,4 +1,7 @@
-FROM eclipse-temurin:17-jdk-alpine
+FROM eclipse-temurin:17-jre-alpine
+RUN addgroup -S app && adduser -S app -G app
+WORKDIR /app
+COPY target/*.jar app.jar
+USER app
 EXPOSE 8080
-COPY target/eventsProject-1.0.0-SNAPSHOT.jar app.jar
-ENTRYPOINT ["java","-jar","/app.jar"]
+ENTRYPOINT ["java","-XX:MaxRAMPercentage=75","-jar","app.jar"]
