@@ -18,7 +18,7 @@ pipeline {
     AWS_REGION = 'us-east-1'
     CLUSTER    = 'fst-events'
     PLATFORM   = 'AhlemMastouri/Events-Platform'
-    ECR_REPO   = '123456789012.dkr.ecr.us-east-1.amazonaws.com/events-app'  // terraform output ecr_url
+    ECR_REPO = '155368763737.dkr.ecr.us-east-1.amazonaws.com/events-app'  // terraform output ecr_url
     ARGO_URL   = 'https://HOTE-ARGOCD.us-east-1.elb.amazonaws.com'           // EXTERNAL-IP argocd-server
     APP_BASE   = 'http://HOTE-APP.us-east-1.elb.amazonaws.com/events'        // EXTERNAL-IP events-app
   }
