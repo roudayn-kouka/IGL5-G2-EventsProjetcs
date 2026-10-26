@@ -110,9 +110,9 @@ pipeline {
       when { expression { env.DEPLOY == 'true' } }
       steps {
         withCredentials([usernamePassword(credentialsId: 'platform-creds', usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN'),
-                         string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
-                         string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY'),
-                         string(credentialsId: 'aws-session-token', variable: 'AWS_SESSION_TOKEN')]) {
+               string(credentialsId: 'aws_access_key_id',     variable: 'AWS_ACCESS_KEY_ID'),
+string(credentialsId: 'aws_secret_access_key', variable: 'AWS_SECRET_ACCESS_KEY'),
+string(credentialsId: 'aws_session_token',     variable: 'AWS_SESSION_TOKEN')]) {
           sh '''
             export AWS_DEFAULT_REGION=$AWS_REGION
             rm -rf tfrepo
@@ -158,14 +158,13 @@ pipeline {
           sh "trivy image --timeout 30m --scanners vuln --skip-java-db-update --severity CRITICAL --ignore-unfixed --exit-code ${exitCode} --output trivy-image.txt ${env.IMAGE}${tolerate}"
         }
       }
-    }
-
-    stage('10 · Push image · Amazon ECR') {
+    }    stage('10 · Push image · Amazon ECR') {
       when { expression { env.DEPLOY == 'true' } }
       steps {
-        withCredentials([string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
-                         string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY'),
-                         string(credentialsId: 'aws-session-token', variable: 'AWS_SESSION_TOKEN')]) {
+        withCredentials([string(credentialsId: 'aws_access_key_id', variable: 'AWS_ACCESS_KEY_ID'),
+                         string(credentialsId: 'aws_secret_access_key', variable: 'AWS_SECRET_ACCESS_KEY'),
+                         string(credentialsId: 'aws_session_token', variable: 'AWS_SESSION_TOKEN')]) {
+
           sh '''
             export AWS_DEFAULT_REGION=$AWS_REGION
             REGISTRY=${ECR_REPO%%/*}
