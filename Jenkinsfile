@@ -158,7 +158,8 @@ string(credentialsId: 'aws_session_token',     variable: 'AWS_SESSION_TOKEN')]) 
           sh "trivy image --timeout 30m --scanners vuln --skip-java-db-update --severity CRITICAL --ignore-unfixed --exit-code ${exitCode} --output trivy-image.txt ${env.IMAGE}${tolerate}"
         }
       }
-    }    stage('10 · Push image · Amazon ECR') {
+    }    
+    stage('10 · Push image · Amazon ECR') {
       when { expression { env.DEPLOY == 'true' } }
       steps {
         withCredentials([string(credentialsId: 'aws_access_key_id', variable: 'AWS_ACCESS_KEY_ID'),
