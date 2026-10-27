@@ -1,8 +1,17 @@
 locals {
   use_lab_role = var.lab_role_arn != ""
+
+  # Cluster effectif : module (compte classique) ou ressources natives (AWS Academy, eks-lab.tf)
+  cluster_name     = local.use_lab_role ? one(aws_eks_cluster.lab[*].name) : one(module.eks[*].cluster_name)
+  cluster_endpoint = local.use_lab_role ? one(aws_eks_cluster.lab[*].endpoint) : one(module.eks[*].cluster_endpoint)
+  cluster_ca       = local.use_lab_role ? one(aws_eks_cluster.lab[*].certificate_authority[0].data) : one(module.eks[*].cluster_certificate_authority_data)
 }
 
+# Compte classique uniquement. Le module lit toujours data.aws_iam_session_context
+# (iam:GetRole sur le rôle de session), refusé sur AWS Academy : voir eks-lab.tf.
 module "eks" {
+  count = local.use_lab_role ? 0 : 1
+
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 20.31"
 
@@ -47,4 +56,11 @@ module "eks" {
       }
     }
   }
+}
+
+# Le module est passé de « module.eks » à « module.eks[0] » avec count : sans ce bloc,
+# un cluster classique déjà créé serait détruit puis recréé.
+moved {
+  from = module.eks
+  to   = module.eks[0]
 }

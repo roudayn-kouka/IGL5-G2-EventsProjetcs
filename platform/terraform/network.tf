@@ -18,6 +18,13 @@ module "vpc" {
   single_nat_gateway   = true # 1 seule NAT : suffisant pour un projet étudiant, divise le coût
   enable_dns_hostnames = true
 
-  public_subnet_tags  = { "kubernetes.io/role/elb" = 1 }
-  private_subnet_tags = { "kubernetes.io/role/internal-elb" = 1 }
+  # Découverte des sous-réseaux par les load balancers Kubernetes (rôle + appartenance au cluster)
+  public_subnet_tags = {
+    "kubernetes.io/role/elb"               = 1
+    "kubernetes.io/cluster/${var.project}" = "shared"
+  }
+  private_subnet_tags = {
+    "kubernetes.io/role/internal-elb"      = 1
+    "kubernetes.io/cluster/${var.project}" = "shared"
+  }
 }
