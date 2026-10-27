@@ -6,7 +6,7 @@ Les commandes shell supposent Linux, macOS, WSL ou Git Bash avec GNU Make et Bas
 
 ## 1. Prérequis
 
-- AWS CLI configuré pour le compte/lab autorisé dans `eu-west-3`, avec accès à EKS, EC2, ECR, IAM, S3, DynamoDB et aux ressources nécessaires.
+- AWS CLI configuré pour le compte autorisé, avec accès à EKS, EC2, ECR, IAM, S3, DynamoDB et aux ressources nécessaires. Région par défaut `eu-west-3`; sur **AWS Academy**, `us-east-1` ou `us-west-2` (voir [section 1 bis](#1-bis-aws-academy-learner-lab)).
 - Terraform `>= 1.6`, GNU Make, Bash, Git et Python 3.
 - `kubectl`, `dig`, `curl`, `ansible-playbook`, `ansible-galaxy`, `ansible-vault`.
 - Clé publique SSH locale correspondant à `ssh_public_key_path` dans les variables Terraform.
@@ -25,6 +25,66 @@ Le dépôt a deux historiques : `main`/`develop`/`feature/*` (code + `platform/`
 ```bash
 git push origin gitops
 ```
+
+## 1 bis. AWS Academy (Learner Lab)
+
+Le projet fonctionne aussi sur un compte AWS Academy (Learner Lab), sans rien changer pour un compte AWS classique : le **mode lab** s'active uniquement quand `lab_role_arn` est renseigné dans `terraform.tfvars`.
+
+### Limites du lab et dimensionnement
+
+| Contrainte Academy | Conséquence dans le projet |
+|---|---|
+| Régions `us-east-1` et `us-west-2` uniquement | `region = "us-east-1"` dans les tfvars; le Makefile reprend la région de `aws configure get region`. |
+| Instances de taille `large` au maximum; 9 instances et 32 vCPU au total | EC2 DevOps `t3.large` + 2 nœuds EKS `t3.large` (4 au plus avec l'autoscaling) : 5 instances, 10 vCPU au maximum. |
+| Aucune création de rôle IAM (`LabRole` et `LabInstanceProfile` existent) | Mode lab : EKS et ses nœuds utilisent `LabRole`, l'EC2 DevOps `LabInstanceProfile`; pas de fournisseur OIDC (IRSA désactivé). Aucun rôle, politique, profil ni OIDC IAM n'est créé. |
+| Identifiants temporaires, renouvelés à chaque séance | Recopier les identifiants à chaque séance (ci-dessous). |
+| Crédit limité | Version Kubernetes en **support standard** (le support étendu coûte 6 fois plus cher); `make destroy` en fin de projet. |
+
+`t3.large` n'a que 8 Go de mémoire : Ansible active automatiquement le **profil mémoire réduite** (RAM < 12 000 Mo), avec un fichier d'échange de 8 Go (`/swapfile`, persistant, `vm.swappiness=10`), Jenkins `-Xmx1g` avec 1 exécuteur, Nexus `-Xms512m -Xmx1g -XX:MaxDirectMemorySize=1g`. Les builds sont plus lents mais passent. Au-delà de 12 Go (par exemple `t3.xlarge`, valeur par défaut du compte classique), rien ne change. Le profil se force avec `-e low_memory_profile=true` ou `false`.
+
+### Travailler dans le home WSL, pas sous `/mnt/c`
+
+Sous Windows, clonez et lancez le projet **dans le système de fichiers WSL** (`~/`), pas dans `/mnt/c/...` :
+
+```bash
+cd ~ && git clone https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git
+cd IGL5-G2-EventsProjetcs/platform
+```
+
+Sous `/mnt/c`, tous les fichiers apparaissent en écriture pour tous (`777`). Ansible **ignore alors `ansible.cfg`** (« Ansible is being run in a world writable directory… ignoring it as an ansible.cfg source ») : plus d'inventaire `inventory/hosts.ini`, plus de `roles_path`, et le playbook échoue avec « provided hosts list is empty ». La clé SSH ne peut pas non plus y être protégée en `0600`.
+
+### Identifiants : à recopier à chaque séance
+
+1. Dans le Learner Lab : **Start Lab**, attendre le voyant vert, puis **AWS Details → AWS CLI : Show**.
+2. Copier le bloc `[default]` (`aws_access_key_id`, `aws_secret_access_key`, `aws_session_token`) dans `~/.aws/credentials` (remplacer l'ancien bloc).
+3. Région dans `~/.aws/config` :
+
+   ```ini
+   [default]
+   region = us-east-1
+   ```
+
+4. Vérifier, puis rafraîchir le kubeconfig (le jeton EKS est dérivé de ces identifiants) :
+
+   ```bash
+   aws sts get-caller-identity          # doit afficher assumed-role/voclabs/...
+   make help                            # affiche « Région AWS : us-east-1 »
+   make kubeconfig && kubectl get nodes
+   ```
+
+Si votre IP publique a changé depuis la dernière séance, suivez la procédure `admin_cidr` de la [section 2](#2-préparer-le-backend-terraform-distant).
+
+### Fichiers de configuration Academy
+
+```bash
+cp terraform/terraform.tfvars.academy.example terraform/terraform.tfvars
+aws iam get-role --role-name LabRole --query Role.Arn --output text      # -> lab_role_arn
+aws eks describe-cluster-versions --region us-east-1 \
+  --query 'clusterVersions[?versionStatus==`STANDARD_SUPPORT`].[clusterVersion,endOfStandardSupportDate]' \
+  --output table                                                         # -> cluster_version
+```
+
+Renseignez `lab_role_arn`, `cluster_version` (la plus récente en `STANDARD_SUPPORT`), `admin_cidr`, la clé SSH et les secrets. Pour le backend, `make bootstrap-state` crée `fst-events-tfstate-<compte>-us-east-1`; dans `terraform/backend.hcl`, utilisez ce bucket et `region = "us-east-1"` (commentaire dans `backend.hcl.example`). La suite (sections 2 à 10) est identique au compte classique.
 
 ## 2. Préparer le backend Terraform distant
 
@@ -267,6 +327,7 @@ terraform -chdir=terraform init -backend=false
 terraform -chdir=terraform validate
 ansible-galaxy collection install -r ansible/requirements.yml
 ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --syntax-check
+(cd ansible && ansible-lint site.yml roles)
 helm lint gitops/charts/events-app -f gitops/charts/events-app/values-review.yaml
 helm lint gitops/charts/events-app -f gitops/charts/events-app/values-staging.yaml
 helm lint gitops/charts/events-app -f gitops/charts/events-app/values-prod.yaml
@@ -303,6 +364,14 @@ make destroy
 Si des load balancers subsistent ou si l'attente expire, le script s'arrête sans lancer `terraform destroy`; diagnostiquez les ressources restantes avant de relancer. Les données MySQL de staging/prod sont sur des PVC dont la StorageClass a `reclaimPolicy: Delete` : leur suppression est destructive.
 
 ## 11. Dépannage
+
+### Région incohérente
+
+`make post-apply` et `make destroy` s'arrêtent si le contexte kubectl ou l'état Terraform désignent une autre région que celle du Makefile (`make help` l'affiche). Alignez `region` dans `terraform/terraform.tfvars`, `~/.aws/config` (ou `AWS_REGION`), puis `make kubeconfig`.
+
+### `ansible.cfg` ignoré / « provided hosts list is empty »
+
+Le dépôt est sous `/mnt/c` (WSL) ou dans un dossier en écriture pour tous : travaillez dans `~/` (voir [section 1 bis](#travailler-dans-le-home-wsl-pas-sous-mntc)).
 
 ### Erreurs de certificat : antivirus qui intercepte le HTTPS
 

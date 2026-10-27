@@ -5,10 +5,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TIMEOUT_SECONDS="${DESTROY_LB_TIMEOUT_SECONDS:-900}"
 POLL_SECONDS="${DESTROY_LB_POLL_SECONDS:-15}"
 CLUSTER_NAME="${EKS_CLUSTER_NAME:-fst-events}"
+# shellcheck source-path=SCRIPTDIR source=region.sh
+source "$ROOT/scripts/region.sh"
+REGION="$(resolve_region)"
 
 for command_name in kubectl aws terraform; do
   command -v "$command_name" >/dev/null || { printf '%s est requis.\n' "$command_name" >&2; exit 1; }
 done
+check_region_consistency "$REGION" "$ROOT/terraform"
 
 echo "Désactivation de l'auto-sync des applications racine et ingress-nginx."
 kubectl -n argocd patch application platform --type=merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
@@ -26,13 +30,13 @@ kubectl -n argocd patch service argocd-server --type=merge -p \
 
 deadline=$((SECONDS + TIMEOUT_SECONDS))
 while (( SECONDS < deadline )); do
-  load_balancers="$(aws elbv2 describe-load-balancers --query 'LoadBalancers[].LoadBalancerArn' --output text)"
+  load_balancers="$(aws elbv2 describe-load-balancers --region "$REGION" --query 'LoadBalancers[].LoadBalancerArn' --output text)"
   project_load_balancers=()
   if [[ "$load_balancers" == "None" ]]; then
     load_balancers=""
   fi
   for arn in $load_balancers; do
-    cluster_tag="$(aws elbv2 describe-tags --resource-arns "$arn" \
+    cluster_tag="$(aws elbv2 describe-tags --region "$REGION" --resource-arns "$arn" \
       --query "TagDescriptions[0].Tags[?((Key=='kubernetes.io/cluster/${CLUSTER_NAME}' && (Value=='owned' || Value=='shared')) || (Key=='elbv2.k8s.aws/cluster' && Value=='${CLUSTER_NAME}'))].Key | [0]" \
       --output text)"
     if [[ "$cluster_tag" != "None" && -n "$cluster_tag" ]]; then

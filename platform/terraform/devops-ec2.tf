@@ -28,7 +28,7 @@ resource "aws_security_group" "devops" {
     cidr_blocks = [var.admin_cidr]
   }
   ingress {
-    description = "HTTP (challenge Let's Encrypt)"
+    description = "HTTP (challenge ACME Lets Encrypt)"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"

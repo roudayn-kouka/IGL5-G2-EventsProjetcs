@@ -19,6 +19,60 @@
     - { name: vm.max_map_count, value: "524288" }
     - { name: fs.file-max, value: "131072" }
 
+- name: Profil mémoire réduite · fichier d'échange et swappiness
+  when: low_memory_profile | bool
+  block:
+    - name: Créer le fichier d'échange
+      ansible.builtin.command:
+        cmd: "fallocate -l {{ swap_file_size_mb }}M {{ swap_file_path }}"
+        creates: "{{ swap_file_path }}"
+
+    - name: Restreindre les droits du fichier d'échange
+      ansible.builtin.file:
+        path: "{{ swap_file_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Lire la signature du fichier d'échange
+      ansible.builtin.command:
+        cmd: "blkid -o value -s TYPE {{ swap_file_path }}"
+      register: common_swap_file_type
+      changed_when: false
+      failed_when: false
+
+    - name: Formater le fichier d'échange
+      ansible.builtin.command:
+        cmd: "mkswap {{ swap_file_path }}"
+      when: common_swap_file_type.stdout != 'swap'
+      changed_when: true
+
+    - name: Lister les espaces d'échange actifs
+      ansible.builtin.command:
+        cmd: swapon --show=NAME --noheadings
+      register: common_active_swaps
+      changed_when: false
+
+    - name: Activer le fichier d'échange
+      ansible.builtin.command:
+        cmd: "swapon {{ swap_file_path }}"
+      when: swap_file_path not in common_active_swaps.stdout_lines
+      changed_when: true
+
+    - name: Rendre le fichier d'échange persistant (fstab)
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: '^{{ swap_file_path }}\s'
+        line: "{{ swap_file_path }} none swap sw 0 0"
+        state: present
+
+    - name: Limiter le recours au swap (vm.swappiness)
+      ansible.posix.sysctl:
+        name: vm.swappiness
+        value: "10"
+        sysctl_file: /etc/sysctl.d/99-swap.conf
+        reload: true
+
 - name: Mises à jour de sécurité automatiques
   ansible.builtin.apt:
     name: unattended-upgrades

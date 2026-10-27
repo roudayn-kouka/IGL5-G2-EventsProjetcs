@@ -11,12 +11,16 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$ROOT/.." && pwd)"
+# shellcheck source-path=SCRIPTDIR source=region.sh
+source "$ROOT/scripts/region.sh"
+REGION="$(resolve_region)"
 TIMEOUT_SECONDS="${POST_APPLY_TIMEOUT_SECONDS:-900}"
 POLL_SECONDS="${POST_APPLY_POLL_SECONDS:-10}"
 
 command -v kubectl >/dev/null || { echo "kubectl est requis." >&2; exit 1; }
 command -v dig >/dev/null || { echo "dig est requis." >&2; exit 1; }
 command -v python3 >/dev/null || { echo "python3 est requis." >&2; exit 1; }
+check_region_consistency "$REGION" "$ROOT/terraform"
 
 deadline=$((SECONDS + TIMEOUT_SECONDS))
 argocd_dns=""

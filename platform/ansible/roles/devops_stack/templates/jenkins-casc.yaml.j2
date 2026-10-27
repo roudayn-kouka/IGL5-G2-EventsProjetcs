@@ -2,7 +2,7 @@
 # Jenkins Configuration as Code : Jenkins est entièrement reconstruit à partir de ce fichier
 jenkins:
   systemMessage: "Usine DevOps · Events FST (IGL5 G2) — configurée par Ansible + JCasC"
-  numExecutors: 2
+  numExecutors: {{ jenkins_num_executors }}
   securityRealm:
     local:
       allowsSignup: false

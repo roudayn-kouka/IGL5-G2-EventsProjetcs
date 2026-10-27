@@ -3,6 +3,18 @@ stack_dir: /opt/fst-devops
 base_domain: "{{ devops_public_ip }}.sslip.io"     # jenkins.<ip>.sslip.io, sonar..., nexus...
 timezone: Africa/Tunis
 
+# Profil mémoire réduite (ex. t3.large AWS Academy, 8 Go) : activé automatiquement sous
+# 12 000 Mo de RAM. Forçable : -e low_memory_profile=true|false. Au-delà, valeurs inchangées.
+low_memory_threshold_mb: 12000
+low_memory_profile: "{{ ansible_memtotal_mb | int < low_memory_threshold_mb | int }}"
+swap_file_path: /swapfile
+swap_file_size_mb: 8192
+jenkins_java_heap: "{{ '1g' if low_memory_profile | bool else '2g' }}"
+jenkins_num_executors: "{{ 1 if low_memory_profile | bool else 2 }}"
+nexus_jvm_params: >-
+  {{ '-Xms512m -Xmx1g -XX:MaxDirectMemorySize=1g' if low_memory_profile | bool
+     else '-Xms1g -Xmx2g -XX:MaxDirectMemorySize=2g' }}
+
 # Dépôts GitHub
 github_owner: roudayn-kouka
 app_repo: IGL5-G2-EventsProjetcs

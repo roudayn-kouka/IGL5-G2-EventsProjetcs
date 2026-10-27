@@ -1,9 +1,17 @@
 .DEFAULT_GOAL := help
-AWS_REGION ?= eu-west-3
+# Région : AWS_REGION (ou AWS_DEFAULT_REGION) si définie, sinon celle de la configuration
+# AWS CLI (aws configure get region, us-east-1 sur AWS Academy), sinon eu-west-3.
+# Exportée : scripts, aws et terraform utilisent tous la même. Elle doit égaler
+# « region » de terraform/terraform.tfvars (contrôlé par post-apply.sh et destroy.sh).
+ifndef AWS_REGION
+AWS_REGION := $(or $(AWS_DEFAULT_REGION),$(shell aws configure get region 2>/dev/null),eu-west-3)
+endif
+export AWS_REGION
 
 .PHONY: help bootstrap-state init plan apply kubeconfig configure post-apply argocd-ui argocd-token grafana-ui status destroy
 
 help:
+	@echo "Région AWS : $(AWS_REGION)"
 	@echo "Cibles disponibles :"
 	@awk -F ':|##' '/^[a-zA-Z0-9_-]+:.*##/ { printf "  %-18s %s\n", $$1, $$3 }' $(MAKEFILE_LIST)
 

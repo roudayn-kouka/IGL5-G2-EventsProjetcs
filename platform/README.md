@@ -38,7 +38,7 @@ Flux de livraison : `git push` → GitHub webhook → Jenkins Multibranch → Ma
 | Fichier | Ressources / responsabilité |
 |---|---|
 | `terraform/network.tf` | VPC `10.20.0.0/16`, sous-réseaux publics et privés sur deux AZ, Internet Gateway, NAT et routage. |
-| `terraform/eks.tf` | Cluster EKS, groupes de nœuds privés et modules complémentaires, dont EBS CSI; API publique restreinte au CIDR administrateur et point d'accès privé activé (nœuds et VPC). |
+| `terraform/eks.tf` | Cluster EKS, groupes de nœuds privés et modules complémentaires, dont EBS CSI; API publique restreinte au CIDR administrateur et point d'accès privé activé (nœuds et VPC). En mode lab : `LabRole`, sans IRSA ni rôle IAM créé. |
 | `terraform/ecr.tf` | Registre `events-app`, scan et politique de rétention. |
 | `terraform/devops-ec2.tf` | EC2 d'outillage, IP élastique, sécurité, IAM/instance profile et clé SSH; sorties limitées à DNS interne et HTTP(S). |
 | `terraform/argocd.tf` | Namespace et secrets de monitoring, chart Argo CD 7.7.11 et application racine. |
@@ -47,6 +47,7 @@ Flux de livraison : `git push` → GitHub webhook → Jenkins Multibranch → Ma
 | `terraform/variables.tf`, `providers.tf`, `versions.tf` | Entrées AWS, fournisseurs, versions et backend S3 partiel. |
 | `terraform/backend.hcl.example` | Exemple de bucket, clé `platform/terraform.tfstate`, région, table DynamoDB et chiffrement. |
 | `terraform/terraform.tfvars.example` | Valeurs d'exemple; les vrais `terraform.tfvars` et `backend.hcl` sont ignorés par Git. |
+| `terraform/terraform.tfvars.academy.example` | Valeurs AWS Academy : `us-east-1`, `lab_role_arn`, `t3.large`, version Kubernetes en support standard. |
 | `scripts/bootstrap-state.sh` | Crée le bucket S3 versionné/chiffré/protégé contre l'accès public et la table DynamoDB à la demande. |
 
 Le backend distant est initialisé depuis un état local : `make bootstrap-state`, copie et renseignement de `terraform/backend.hcl`, puis `make init`. Les détails et les commandes de mise en service sont dans [docs/GUIDE-EXECUTION.md](../docs/GUIDE-EXECUTION.md).
@@ -57,7 +58,7 @@ Le backend distant est initialisé depuis un état local : `make bootstrap-state
 
 | Rôle | Actions |
 |---|---|
-| `common` | Paquets de base, fuseau `Africa/Tunis`, réglages système nécessaires à SonarQube. |
+| `common` | Paquets de base, fuseau `Africa/Tunis`, réglages système nécessaires à SonarQube; en profil mémoire réduite, swap de 8 Go et `vm.swappiness=10`. |
 | `docker` | Docker Engine, Compose et journaux. |
 | `devops_stack` | Image Jenkins construite depuis `files/jenkins/` (Maven, Docker CLI, AWS CLI, Argo CD CLI, `jq`); Caddy, Jenkins, Nexus, SonarQube/PostgreSQL; configuration JCasC et job Multibranch. |
 | `sonar_config` | Attend la santé de SonarQube, remplace `admin/admin` par le mot de passe Vault, configure le webhook interne `http://jenkins:8080/sonarqube-webhook/`, crée au plus un jeton nommé `jenkins` et l'affiche uniquement lors de sa création. |
@@ -97,7 +98,7 @@ Alertmanager publie les incidents/résolutions dans `#igl5-g2-alertes`; Jenkins 
 
 ## Makefile
 
-Toutes les cibles sont listées par `make help`; elles impriment leur action avant exécution.
+Toutes les cibles sont listées par `make help`; elles impriment leur action avant exécution. La région AWS (`AWS_REGION`, sinon `aws configure get region`, sinon `eu-west-3`) est affichée par `make help` et exportée à tous les scripts.
 
 | Cible | Effet |
 |---|---|
@@ -113,6 +114,20 @@ Toutes les cibles sont listées par `make help`; elles impriment leur action ava
 | `make argocd-token` | Affiche la commande de génération du jeton API pour le compte Jenkins. |
 | `make status` | Montre Applications Argo CD, pods et URL des outils. |
 | `make destroy` | Nettoie les ressources Kubernetes puis demande confirmation avant `terraform destroy`. |
+
+## AWS Academy (Learner Lab)
+
+Le même code fonctionne sur un compte AWS classique et sur AWS Academy; le mode lab s'active seulement si `lab_role_arn` est renseigné.
+
+| Limite Academy | Réponse du projet |
+|---|---|
+| Régions `us-east-1` / `us-west-2` | `terraform/terraform.tfvars.academy.example` (`us-east-1`); Makefile et scripts reprennent la région de la configuration AWS CLI et refusent d'agir sur un cluster d'une autre région. |
+| Instances `large` au maximum, 9 instances, 32 vCPU | `t3.large` pour l'EC2 DevOps et les nœuds : 5 instances et 10 vCPU au plus. |
+| Aucun rôle IAM créable | `LabRole` (EKS, nœuds) et `LabInstanceProfile` (EC2); `enable_irsa = false`. Aucun rôle, politique, profil d'instance ni fournisseur OIDC IAM créé (vérifié par `terraform test` avec fournisseurs simulés). |
+| Identifiants temporaires | À recopier dans `~/.aws/credentials` à chaque séance, puis `make kubeconfig`. |
+| 8 Go de RAM sur `t3.large` | Profil Ansible « mémoire réduite » automatique sous 12 000 Mo : swap 8 Go, Jenkins `-Xmx1g` et 1 exécuteur, Nexus `-Xmx1g`. |
+
+Sous Windows, travaillez dans le home WSL (`~/`), pas sous `/mnt/c` : Ansible y ignore `ansible.cfg` (dossier en écriture pour tous) et ne trouve plus l'inventaire. Procédure complète : [guide, section 1 bis](../docs/GUIDE-EXECUTION.md#1-bis-aws-academy-learner-lab).
 
 ## Documentation
 

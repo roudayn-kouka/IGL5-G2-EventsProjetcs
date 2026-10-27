@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REGION="${AWS_REGION:-eu-west-3}"
+# shellcheck source-path=SCRIPTDIR source=region.sh
+source "$(dirname "${BASH_SOURCE[0]}")/region.sh"
+REGION="$(resolve_region)"
 PREFIX="${TF_STATE_BUCKET_PREFIX:-fst-events-tfstate}"
 TABLE="${TF_STATE_LOCK_TABLE:-fst-events-tflock}"
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
