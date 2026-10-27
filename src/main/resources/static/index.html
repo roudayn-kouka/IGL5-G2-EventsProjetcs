@@ -269,9 +269,9 @@
         <table>
           <thead><tr>
             <th>Événement</th><th>Dates</th><th class="num">Durée</th><th class="num">Participants</th>
-            <th class="num">Logistique</th><th class="num">Coût réservé</th><th>Statut</th>
+            <th class="num">Logistique</th><th class="num">Coût réservé</th><th class="num">Note moyenne</th><th>Statut</th>
           </tr></thead>
-          <tbody id="evBody"><tr><td colspan="7" class="empty">Chargement…</td></tr></tbody>
+          <tbody id="evBody"><tr><td colspan="8" class="empty">Chargement…</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -566,8 +566,9 @@
         '<td class="num">' + e.nbParticipants + "</td>" +
         '<td class="num">' + e.nbLogisticsReservees + " / " + e.nbLogistics + "</td>" +
         '<td class="num">' + nf2.format(e.coutLogistiqueReservee) + ' DT<span class="mini-bar"><i style="width:' + (100 * e.coutLogistiqueReservee / max) + '%"></i></span></td>' +
+        '<td class="num">' + (e.averageRating > 0 ? nf2.format(e.averageRating) + ' / 5' : 'Aucun avis') + '</td>' +
         "<td>" + statusPill(e) + "</td></tr>";
-    }).join("") : '<tr><td colspan="7" class="empty">Aucun événement</td></tr>';
+    }).join("") : '<tr><td colspan="8" class="empty">Aucun événement</td></tr>';
   }
 
   function renderLists() {

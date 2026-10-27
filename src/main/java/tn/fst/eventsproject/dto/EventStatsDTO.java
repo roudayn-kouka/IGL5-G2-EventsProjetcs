@@ -43,4 +43,7 @@ public class EventStatsDTO implements Serializable {
 
     /** Coût des logistiques réservées : somme de prixUnit * quantite. */
     float coutLogistiqueReservee;
+
+    /** Average feedback rating; zero when no feedback exists. */
+    double averageRating;
 }

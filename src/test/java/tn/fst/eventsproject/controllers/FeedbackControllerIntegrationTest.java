@@ -26,7 +26,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties = {"server.servlet.context-path=/events", "spring.jpa.open-in-view=false"})
+@SpringBootTest(properties = {"server.servlet.context-path=/events", "spring.jpa.open-in-view=false",
+        "spring.datasource.url=jdbc:h2:mem:feedbackHttp;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE"})
 @AutoConfigureMockMvc
 @Transactional
 class FeedbackControllerIntegrationTest {
@@ -149,5 +150,31 @@ class FeedbackControllerIntegrationTest {
     void malformedIdReturnsReadableBadRequest() throws Exception {
         mvc.perform(get("/events/feedback/event/abc").contextPath("/events"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").isNotEmpty());
+    }
+
+    @Test
+    void eventStatisticsReflectFeedbackCreationAndDeletion() throws Exception {
+        mvc.perform(get("/events/event-stats/{id}", eventId).contextPath("/events"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.averageRating").value(0.0));
+        String created = submit(eventId, participantId, "{\"note\":4}")
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        int feedbackId = mapper.readTree(created).get("id").asInt();
+        Participant second = new Participant();
+        second.setEvents(Collections.singleton(entityManager.find(Event.class, eventId)));
+        entityManager.persist(second);
+        submit(eventId, second.getIdPart(), "{\"note\":5}").andExpect(status().isCreated());
+        // Reload the inverse collection after assigning the second participant on the owning side.
+        entityManager.flush();
+        entityManager.clear();
+        mvc.perform(get("/events/event-stats/{id}", eventId).contextPath("/events"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.averageRating").value(4.5))
+                .andExpect(jsonPath("$.nbParticipants").value(2));
+        mvc.perform(get("/events/event-stats").contextPath("/events"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[?(@.idEvent == " + eventId + ")].averageRating")
+                        .value(org.hamcrest.Matchers.contains(4.5)));
+        mvc.perform(delete("/events/feedback/{id}", feedbackId).contextPath("/events"))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/events/event-stats/{id}", eventId).contextPath("/events"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.averageRating").value(5.0));
     }
 }

@@ -14,6 +14,7 @@ import tn.fst.eventsproject.entities.Logistics;
 import tn.fst.eventsproject.entities.Participant;
 import tn.fst.eventsproject.entities.Tache;
 import tn.fst.eventsproject.repositories.EventRepository;
+import tn.fst.eventsproject.repositories.FeedbackRepository;
 import tn.fst.eventsproject.repositories.LogisticsRepository;
 import tn.fst.eventsproject.repositories.ParticipantRepository;
 
@@ -41,6 +42,9 @@ public class EventStatsServiceImplMockTest {
     ParticipantRepository participantRepository;
     @Mock
     LogisticsRepository logisticsRepository;
+
+    @Mock
+    FeedbackRepository feedbackRepository;
 
     @InjectMocks
     EventStatsServiceImpl eventStatsService;
@@ -84,10 +88,12 @@ public class EventStatsServiceImplMockTest {
     @Test
     public void testGetEventStats() {
         when(eventRepository.findById(1)).thenReturn(Optional.of(buildEvent(1)));
+        when(feedbackRepository.averageRatingByEvent(1)).thenReturn(4.5);
 
         EventStatsDTO stats = eventStatsService.getEventStats(1);
 
         assertEquals(1, stats.getIdEvent());
+        assertEquals(4.5, stats.getAverageRating(), 0.001);
         assertEquals("Journée Portes Ouvertes", stats.getDescription());
         assertEquals(3, stats.getDureeJours());
         assertEquals(3, stats.getNbParticipants());

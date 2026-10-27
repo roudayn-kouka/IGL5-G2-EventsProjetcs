@@ -23,7 +23,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /** Real transactions in separate request threads, with no Mockito or test-managed transaction. */
-@SpringBootTest(properties = {"spring.datasource.url=jdbc:h2:mem:feedbackConcurrency;DB_CLOSE_DELAY=-1",
+@SpringBootTest(properties = {"spring.datasource.url=jdbc:h2:mem:feedbackConcurrency;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
         "spring.jpa.open-in-view=false", "server.servlet.context-path=/events"})
 @AutoConfigureMockMvc
 class FeedbackConcurrencyIntegrationTest {

@@ -46,6 +46,17 @@ No authentication system exists in this project. Deletion authorization remains
 outside this assignment's scope; this endpoint follows the existing unauthenticated
 API conventions.
 
+## Event statistics integration
+
+Event-statistics responses now include an additive `averageRating` property.
+`EventStatsServiceImpl.buildStats` uses the repository's database aggregate, so
+individual events and all existing event-list/filter endpoints receive ratings.
+The dashboard event table displays a "Note moyenne" column, formatted out of 5,
+or "Aucun avis" when the value is zero. Existing statistics fields are unchanged.
+No further dashboard integration is required. This adds one aggregate query per
+event in a statistics list; large datasets may eventually benefit from a batched
+aggregate query.
+
 ## Tests and build
 
 - `FeedbackServiceTest`: JUnit/Mockito rules, missing resources, averages, deletion,
@@ -62,6 +73,18 @@ Run `mvn clean verify`. Focused checks are
 `mvn -Dtest=FeedbackServiceTest,FeedbackRepositoryTest test` and
 `mvn -Dtest=Feedback*Test test`. Tests use only H2, without an external MySQL server.
 JaCoCo HTML is generated at `target/site/jacoco/index.html`.
+
+Verified locally on 2026-10-27 with Maven 3.8.6 and JDK 21: `clean verify`
+passed 125 tests, with zero failures, errors or skips. The 52 Feedback tests
+comprise 24 service unit tests, 6 repository tests, 21 HTTP integration tests
+and 1 concurrent HTTP test. JaCoCo covers 49/49 service lines and 27/28 service
+branches, plus all controller and exception-handler lines. The dashboard's
+inline JavaScript also passed `node --check`. JDK 17 was not installed for a
+separate runtime check; Boot 2.7/`javax` compatibility and the existing Java
+compiler target are preserved.
+The build also logs an H2 database-already-closed warning while shutting down a
+shared test context; it does not fail tests or packaging. The Feedback HTTP
+suites use separate named H2 databases with automatic shutdown closing disabled.
 
 ## Manual PowerShell requests
 

@@ -15,6 +15,7 @@ import tn.fst.eventsproject.entities.Logistics;
 import tn.fst.eventsproject.entities.Participant;
 import tn.fst.eventsproject.entities.Tache;
 import tn.fst.eventsproject.repositories.EventRepository;
+import tn.fst.eventsproject.repositories.FeedbackRepository;
 import tn.fst.eventsproject.repositories.LogisticsRepository;
 import tn.fst.eventsproject.repositories.ParticipantRepository;
 
@@ -39,6 +40,7 @@ public class EventStatsServiceImpl implements IEventStatsService {
     EventRepository eventRepository;
     ParticipantRepository participantRepository;
     LogisticsRepository logisticsRepository;
+    FeedbackRepository feedbackRepository;
 
     @Override
     public EventStatsDTO getEventStats(int idEvent) {
@@ -137,6 +139,7 @@ public class EventStatsServiceImpl implements IEventStatsService {
                 .nbLogistics(logistics.size())
                 .nbLogisticsReservees(nbReservees)
                 .coutLogistiqueReservee(cout)
+                .averageRating(feedbackRepository.averageRatingByEvent(event.getIdEvent()))
                 .build();
     }
 
