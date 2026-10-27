@@ -15,7 +15,7 @@ resource "local_file" "ansible_tf_vars" {
   content = templatefile("${path.module}/templates/terraform.yml.tftpl", {
     aws_region   = var.region
     ecr_registry = split("/", aws_ecr_repository.events_app.repository_url)[0]
-    cluster_name = module.eks.cluster_name
+    cluster_name = local.cluster_name
     devops_ip    = aws_eip.devops.public_ip
   })
 }
