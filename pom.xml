@@ -56,8 +56,10 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <optional>true</optional>
+            <version>1.18.34</version>
+            <scope>provided</scope>
         </dependency>
+        
 
         <!-- Tests : JUnit 5 + Mockito + Spring Test (déjà inclus dans le starter) -->
         <dependency>
