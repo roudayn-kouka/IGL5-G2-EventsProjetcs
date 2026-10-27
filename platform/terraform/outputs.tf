@@ -19,6 +19,11 @@ output "eks_cluster_name" {
   value = module.eks.cluster_name
 }
 
+output "region" {
+  description = "Région AWS de l'infrastructure (contrôlée par post-apply.sh et destroy.sh)"
+  value       = var.region
+}
+
 output "kubeconfig_command" {
   value = "aws eks update-kubeconfig --name ${module.eks.cluster_name} --region ${var.region}"
 }
