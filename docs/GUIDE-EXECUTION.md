@@ -36,8 +36,9 @@ Le projet fonctionne aussi sur un compte AWS Academy (Learner Lab), sans rien ch
 |---|---|
 | Régions `us-east-1` et `us-west-2` uniquement | `region = "us-east-1"` dans les tfvars; le Makefile reprend la région de `aws configure get region`. |
 | Instances de taille `large` au maximum; 9 instances et 32 vCPU au total | EC2 DevOps `t3.large` + 2 nœuds EKS `t3.large` (4 au plus avec l'autoscaling) : 5 instances, 10 vCPU au maximum. |
-| Aucune création de rôle IAM (`LabRole` et `LabInstanceProfile` existent) | Mode lab : EKS et ses nœuds utilisent `LabRole`, l'EC2 DevOps `LabInstanceProfile`; pas de fournisseur OIDC (IRSA désactivé). Aucun rôle, politique, profil ni OIDC IAM n'est créé. |
+| Aucune création de rôle IAM (`LabRole` et `LabInstanceProfile` existent); `iam:GetRole` refusé sur le rôle de session `voclabs` | Mode lab : EKS est créé en **ressources natives** (`terraform/eks-lab.tf`) et non par le module `terraform-aws-modules/eks`, qui lit toujours `data.aws_iam_session_context` (`iam:GetRole` sur `voclabs`, refusé explicitement par la politique du lab). Cluster et nœuds utilisent `LabRole`, l'EC2 DevOps `LabInstanceProfile`. Aucun rôle, politique, profil, fournisseur OIDC ni clé KMS n'est créé. |
 | Identifiants temporaires, renouvelés à chaque séance | Recopier les identifiants à chaque séance (ci-dessous). |
+| Pas d'IRSA (fournisseur OIDC IAM impossible) | Les pods qui appellent AWS utilisent le rôle du nœud (`LabRole`) : launch template IMDSv2 avec 2 sauts, nécessaire au pilote EBS CSI. |
 | Crédit limité | Version Kubernetes en **support standard** (le support étendu coûte 6 fois plus cher); `make destroy` en fin de projet. |
 
 `t3.large` n'a que 8 Go de mémoire : Ansible active automatiquement le **profil mémoire réduite** (RAM < 12 000 Mo), avec un fichier d'échange de 8 Go (`/swapfile`, persistant, `vm.swappiness=10`), Jenkins `-Xmx1g` avec 1 exécuteur, Nexus `-Xms512m -Xmx1g -XX:MaxDirectMemorySize=1g`. Les builds sont plus lents mais passent. Au-delà de 12 Go (par exemple `t3.xlarge`, valeur par défaut du compte classique), rien ne change. Le profil se force avec `-e low_memory_profile=true` ou `false`.
@@ -82,6 +83,26 @@ aws iam get-role --role-name LabRole --query Role.Arn --output text      # -> la
 aws eks describe-cluster-versions --region us-east-1 \
   --query 'clusterVersions[?versionStatus==`STANDARD_SUPPORT`].[clusterVersion,endOfStandardSupportDate]' \
   --output table                                                         # -> cluster_version
+```
+
+### Cluster EKS en mode lab
+
+Avec `lab_role_arn` renseigné, `terraform/eks-lab.tf` crée :
+
+| Ressource | Réglages |
+|---|---|
+| `aws_eks_cluster.lab` | `fst-events`, `role_arn = LabRole`, sous-réseaux privés, endpoints privé et public (public limité à `admin_cidr`); `access_config` en `API_AND_CONFIG_MAP` avec `bootstrap_cluster_creator_admin_permissions = true` : EKS donne lui-même l'accès administrateur au rôle `voclabs`, sans appel IAM. Pas de KMS, pas d'OIDC. |
+| `aws_launch_template.lab_nodes` | IMDSv2 obligatoire, `http_put_response_hop_limit = 2`. |
+| `aws_eks_node_group.lab` | `LabRole`, `AL2023_x86_64_STANDARD` (plus d'AMI AL2 à partir de Kubernetes 1.33), `node_instance_type`, 2 / 2 / 4 nœuds. |
+| `aws_eks_addon.lab_network` / `lab_workloads` | `vpc-cni` et `kube-proxy` dès le cluster créé; `coredns` et `aws-ebs-csi-driver` après les nœuds. |
+
+Le compte classique continue d'utiliser le module, sans changement (un bloc `moved` évite toute recréation d'un cluster existant). Les fournisseurs Kubernetes/Helm, les outputs (dont `eks_cluster_name`, utilisé par `make kubeconfig`) et Ansible passent par les locals `cluster_name`, `cluster_endpoint` et `cluster_ca`, qui choisissent le bon cluster. Les sous-réseaux portent le tag `kubernetes.io/cluster/fst-events = shared` pour les load balancers.
+
+Vérification hors ligne, sans identifiants (fournisseurs simulés) :
+
+```bash
+terraform -chdir=terraform init -backend=false
+terraform -chdir=terraform test      # classique : module; Academy : aucun module.eks, aws_iam_*, KMS ni aws_iam_session_context
 ```
 
 Renseignez `lab_role_arn`, `cluster_version` (la plus récente en `STANDARD_SUPPORT`), `admin_cidr`, la clé SSH et les secrets. Pour le backend, `make bootstrap-state` crée `fst-events-tfstate-<compte>-us-east-1`; dans `terraform/backend.hcl`, utilisez ce bucket et `region = "us-east-1"` (commentaire dans `backend.hcl.example`). La suite (sections 2 à 10) est identique au compte classique.
@@ -325,6 +346,7 @@ Depuis le dépôt unique, les commandes d'infrastructure s'exécutent depuis `pl
 terraform -chdir=terraform fmt -check -recursive
 terraform -chdir=terraform init -backend=false
 terraform -chdir=terraform validate
+terraform -chdir=terraform test
 ansible-galaxy collection install -r ansible/requirements.yml
 ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --syntax-check
 (cd ansible && ansible-lint site.yml roles)

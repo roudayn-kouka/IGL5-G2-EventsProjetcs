@@ -38,7 +38,9 @@ Flux de livraison : `git push` → GitHub webhook → Jenkins Multibranch → Ma
 | Fichier | Ressources / responsabilité |
 |---|---|
 | `terraform/network.tf` | VPC `10.20.0.0/16`, sous-réseaux publics et privés sur deux AZ, Internet Gateway, NAT et routage. |
-| `terraform/eks.tf` | Cluster EKS, groupes de nœuds privés et modules complémentaires, dont EBS CSI; API publique restreinte au CIDR administrateur et point d'accès privé activé (nœuds et VPC). En mode lab : `LabRole`, sans IRSA ni rôle IAM créé. |
+| `terraform/eks.tf` | Cluster EKS, groupes de nœuds privés et modules complémentaires, dont EBS CSI; API publique restreinte au CIDR administrateur et point d'accès privé activé (nœuds et VPC). Compte classique uniquement (module `terraform-aws-modules/eks`, `count = 0` en mode lab). |
+| `terraform/eks-lab.tf` | AWS Academy : cluster, launch template (IMDSv2, 2 sauts), node group AL2023 et addons en ressources natives, avec `LabRole`; aucun appel ni ressource IAM, ni KMS, ni OIDC. |
+| `terraform/tests/eks.tftest.hcl` | `terraform test` avec fournisseurs simulés : module en compte classique; en mode lab, aucun `module.eks`, `aws_iam_*`, KMS ni lecture de `aws_iam_session_context`. |
 | `terraform/ecr.tf` | Registre `events-app`, scan et politique de rétention. |
 | `terraform/devops-ec2.tf` | EC2 d'outillage, IP élastique, sécurité, IAM/instance profile et clé SSH; sorties limitées à DNS interne et HTTP(S). |
 | `terraform/argocd.tf` | Namespace et secrets de monitoring, chart Argo CD 7.7.11 et application racine. |
@@ -123,7 +125,8 @@ Le même code fonctionne sur un compte AWS classique et sur AWS Academy; le mode
 |---|---|
 | Régions `us-east-1` / `us-west-2` | `terraform/terraform.tfvars.academy.example` (`us-east-1`); Makefile et scripts reprennent la région de la configuration AWS CLI et refusent d'agir sur un cluster d'une autre région. |
 | Instances `large` au maximum, 9 instances, 32 vCPU | `t3.large` pour l'EC2 DevOps et les nœuds : 5 instances et 10 vCPU au plus. |
-| Aucun rôle IAM créable | `LabRole` (EKS, nœuds) et `LabInstanceProfile` (EC2); `enable_irsa = false`. Aucun rôle, politique, profil d'instance ni fournisseur OIDC IAM créé (vérifié par `terraform test` avec fournisseurs simulés). |
+| Aucun rôle IAM créable; `iam:GetRole` refusé sur le rôle de session `voclabs` | Le module EKS lit toujours `data.aws_iam_session_context` (donc `iam:GetRole` sur `voclabs`) : en mode lab, il est remplacé par des ressources natives (`terraform/eks-lab.tf`) qui utilisent `LabRole`; l'EC2 utilise `LabInstanceProfile`. Aucun rôle, politique, profil, OIDC ni KMS; prouvé par `terraform test` (`terraform/tests/`). |
+| Pas d'IRSA | Les pods utilisent le rôle du nœud : IMDSv2 à 2 sauts dans le launch template (pilote EBS CSI). |
 | Identifiants temporaires | À recopier dans `~/.aws/credentials` à chaque séance, puis `make kubeconfig`. |
 | 8 Go de RAM sur `t3.large` | Profil Ansible « mémoire réduite » automatique sous 12 000 Mo : swap 8 Go, Jenkins `-Xmx1g` et 1 exécuteur, Nexus `-Xmx1g`. |
 
