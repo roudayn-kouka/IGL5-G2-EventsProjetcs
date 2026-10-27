@@ -8,6 +8,8 @@ import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import tn.fst.eventsproject.entities.Event;
@@ -16,6 +18,7 @@ import tn.fst.eventsproject.entities.Participant;
 import tn.fst.eventsproject.repositories.*;
 
 import java.time.*;
+import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Optional;
 
@@ -151,5 +154,78 @@ class FeedbackServiceTest {
     void readsRejectMissingEvent() {
         assertStatus(HttpStatus.NOT_FOUND, () -> service.getFeedbackByEvent(1));
         assertStatus(HttpStatus.NOT_FOUND, () -> service.getAverageRatingByEvent(1));
+    }
+
+    @Test
+    void translatesConcurrentDatabaseDuplicateIntoConflict() {
+        eligible();
+        ConstraintViolationException constraint = new ConstraintViolationException("duplicate",
+                new SQLException("duplicate", "23505"), "PUBLIC.UK_FEEDBACK_EVENT_PARTICIPANT_INDEX_1");
+        when(feedbackRepository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("duplicate", constraint));
+        assertStatus(HttpStatus.CONFLICT, () -> service.createFeedback(1, 2, 5, null));
+    }
+
+    @Test
+    void doesNotMislabelOtherDatabaseErrorsAsDuplicates() {
+        eligible();
+        DataIntegrityViolationException error = new DataIntegrityViolationException("other constraint",
+                new ConstraintViolationException("foreign key", new SQLException(), "fk_feedback_event"));
+        when(feedbackRepository.saveAndFlush(any())).thenThrow(error);
+        assertSame(error, assertThrows(DataIntegrityViolationException.class,
+                () -> service.createFeedback(1, 2, 5, null)));
+    }
+
+    @Test
+    void doesNotMislabelUnknownDatabaseErrors() {
+        eligible();
+        DataIntegrityViolationException error = new DataIntegrityViolationException("unknown");
+        when(feedbackRepository.saveAndFlush(any())).thenThrow(error);
+        assertSame(error, assertThrows(DataIntegrityViolationException.class,
+                () -> service.createFeedback(1, 2, 5, null)));
+    }
+
+    @Test
+    void rejectsNullMembershipCollection() {
+        eligible();
+        participant.setEvents(null);
+        assertStatus(HttpStatus.BAD_REQUEST, () -> service.createFeedback(1, 2, 5, null));
+    }
+
+    @Test
+    void sameParticipantCanReviewDifferentEvents() {
+        eligible();
+        Event second = new Event();
+        second.setIdEvent(3);
+        second.setDateFin(event.getDateFin());
+        participant.setEvents(new java.util.HashSet<>(java.util.Arrays.asList(event, second)));
+        when(eventRepository.findById(3)).thenReturn(Optional.of(second));
+        when(feedbackRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        assertEquals(1, service.createFeedback(1, 2, 1, null).getEvent().getIdEvent());
+        assertEquals(3, service.createFeedback(3, 2, 5, null).getEvent().getIdEvent());
+    }
+
+    @Test
+    void multipleParticipantsCanReviewSameEvent() {
+        eligible();
+        Participant second = new Participant();
+        second.setIdPart(3);
+        second.setEvents(Collections.singleton(event));
+        when(participantRepository.findById(3)).thenReturn(Optional.of(second));
+        when(feedbackRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        assertEquals(2, service.createFeedback(1, 2, 1, null).getParticipant().getIdPart());
+        assertEquals(3, service.createFeedback(1, 3, 5, null).getParticipant().getIdPart());
+    }
+
+    @Test
+    void inclusiveEndDateChangesAtLocalMidnight() {
+        eligible();
+        event.setDateFin(LocalDate.of(2026, 10, 26));
+        Clock boundary = Clock.fixed(Instant.parse("2026-10-26T23:00:00Z"), ZoneId.of("Africa/Tunis"));
+        FeedbackService atMidnight = new FeedbackService(feedbackRepository, eventRepository, participantRepository, boundary);
+        FeedbackService beforeMidnight = new FeedbackService(feedbackRepository, eventRepository,
+                participantRepository, Clock.offset(boundary, Duration.ofNanos(-1)));
+        assertStatus(HttpStatus.BAD_REQUEST, () -> beforeMidnight.createFeedback(1, 2, 5, null));
+        when(feedbackRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        assertEquals(boundary.instant(), atMidnight.createFeedback(1, 2, 5, null).getDate());
     }
 }

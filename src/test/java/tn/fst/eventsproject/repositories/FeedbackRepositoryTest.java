@@ -69,4 +69,36 @@ class FeedbackRepositoryTest {
         review(event, participant, 3);
         assertThrows(DataIntegrityViolationException.class, () -> review(event, participant, 5));
     }
+
+    @Test
+    void sameParticipantCanReviewMultipleEventsAndMultipleParticipantsCanReviewOneEvent() {
+        Event first = new Event();
+        Event second = new Event();
+        entityManager.persist(first);
+        entityManager.persist(second);
+        Participant participant = participant(first);
+        participant.setEvents(new java.util.HashSet<>(java.util.Arrays.asList(first, second)));
+        review(first, participant, 1);
+        review(second, participant, 5);
+        review(first, participant(first), 4);
+        assertEquals(2.5, repository.averageRatingByEvent(first.getIdEvent()));
+        assertEquals(5.0, repository.averageRatingByEvent(second.getIdEvent()));
+    }
+
+    @Test
+    void databaseRejectsMissingRequiredRating() {
+        Event event = new Event();
+        entityManager.persist(event);
+        Feedback feedback = new Feedback();
+        feedback.setEvent(event);
+        feedback.setParticipant(participant(event));
+        assertThrows(DataIntegrityViolationException.class, () -> repository.saveAndFlush(feedback));
+    }
+
+    @Test
+    void databaseRejectsMissingRequiredRelationship() {
+        Feedback feedback = new Feedback();
+        feedback.setNote(5);
+        assertThrows(DataIntegrityViolationException.class, () -> repository.saveAndFlush(feedback));
+    }
 }
