@@ -20,19 +20,12 @@
     </scm>
     <properties>
         <java.version>1.8</java.version>
-        <!--
-            Versions surchargées pour compiler/tester avec un JDK récent (17 -> 26) :
-            - Lombok 1.18.24 (version par défaut de Boot 2.7) ne fonctionne pas avec les JDK récents
-            - Byte Buddy (utilisé par Mockito et Hibernate) doit connaître la version du JDK
-            - SnakeYAML 2.x corrige CVE-2022-1471 (critique, 1.30 par défaut dans Boot 2.7)
-            - Tomcat 9.0.121 corrige 7 CVE critiques de la 9.0.83 fournie par Boot 2.7.18
-        -->
-        <lombok.version>1.18.46</lombok.version>
-        <byte-buddy.version>1.17.7</byte-buddy.version>
-        <jacoco.version>0.8.15</jacoco.version>
-        <snakeyaml.version>2.2</snakeyaml.version>
-        <tomcat.version>9.0.121</tomcat.version>
+        <!-- Versions compatibles avec le JDK 21 du conteneur Jenkins -->
+        <lombok.version>1.18.34</lombok.version>
+        <byte-buddy.version>1.14.12</byte-buddy.version>
+        <jacoco.version>0.8.12</jacoco.version>
     </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -42,16 +35,6 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-        <!-- Observabilité : /actuator/health (probes Kubernetes) et /actuator/prometheus -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.micrometer</groupId>
-            <artifactId>micrometer-registry-prometheus</artifactId>
-        </dependency>
-
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-devtools</artifactId>
@@ -66,25 +49,19 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.34</version>
             <scope>provided</scope>
         </dependency>
-        
 
-        <!-- ===== Tests ===== -->
+        <!-- Tests : JUnit 4 + Mockito + Spring Test + H2 (base en mémoire) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.vintage</groupId>
-            <artifactId>junit-vintage-engine</artifactId>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -137,6 +114,7 @@
                     </excludes>
                 </configuration>
             </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-release-plugin</artifactId>
@@ -145,6 +123,20 @@
                     <tagNameFormat>v@{project.version}</tagNameFormat>
                 </configuration>
             </plugin>
+
+            <!-- Surefire : exécute les tests *Test.java (déclaré UNE seule fois) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>2.14.1</version>
+                <configuration>
+                    <includes>
+                        <include>**/*Test.java</include>
+                    </includes>
+                </configuration>
+            </plugin>
+
+            <!-- JaCoCo : couverture (rapport dans target/site/jacoco/jacoco.xml et index.html) -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
