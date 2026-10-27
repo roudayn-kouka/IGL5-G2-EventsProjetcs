@@ -1,0 +1,11 @@
+# Copier en terraform.tfvars (ignoré par Git) puis : terraform init && terraform apply
+region                 = "eu-west-3"
+platform_repo_url      = "https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git"
+admin_cidr             = "196.203.10.20/32"     # votre IP publique
+ssh_public_key_path    = "~/.ssh/id_ed25519.pub"
+grafana_admin_password = "change-me"
+slack_bot_token        = "xoxb-..."             # Argo CD Notifications
+slack_webhook_url      = "https://hooks.slack.com/services/..."   # Alertmanager
+
+# Compte AWS Academy uniquement :
+# lab_role_arn = "arn:aws:iam::<compte>:role/LabRole"

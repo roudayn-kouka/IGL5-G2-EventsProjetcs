@@ -1,0 +1,11 @@
+bucket         = "fst-events-tfstate-<account-id>-eu-west-3"
+key            = "platform/terraform.tfstate"
+region         = "eu-west-3"
+dynamodb_table = "fst-events-tflock"
+encrypt        = true
+
+# AWS Academy (us-east-1) : le bucket créé par « make bootstrap-state » porte le
+# suffixe de la région; remplacer les deux occurrences de eu-west-3 :
+#   bucket = "fst-events-tfstate-<account-id>-us-east-1"
+#   region = "us-east-1"
+# (us-west-2 de la même façon). La région doit être celle du terraform.tfvars.

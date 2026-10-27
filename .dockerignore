@@ -1,0 +1,5 @@
+# Seul target/*.jar est nécessaire dans le contexte de build
+*
+!target/*.jar
+platform/
+docs/

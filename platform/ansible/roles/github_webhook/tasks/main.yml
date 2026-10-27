@@ -1,0 +1,72 @@
+- name: Vérifier la présence du jeton GitHub requis
+  ansible.builtin.assert:
+    that:
+      - github_token | length > 10
+    fail_msg: >-
+      vault_github_token doit être renseigné avec les portées repo et admin:repo_hook.
+
+- name: Lister les webhooks du dépôt applicatif
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/{{ github_owner }}/{{ app_repo }}/hooks?per_page=100"
+    method: GET
+    headers:
+      Accept: application/vnd.github+json
+      Authorization: "Bearer {{ github_token }}"
+      X-GitHub-Api-Version: "2022-11-28"
+    return_content: true
+    status_code: 200
+  register: github_webhook_list
+  no_log: true
+
+- name: Retrouver le webhook Jenkins
+  ansible.builtin.set_fact:
+    github_webhook_jenkins: >-
+      {{ (github_webhook_list.json | selectattr('config.url', 'equalto', github_webhook_url) | list | first)
+         | default({}) }}
+
+- name: Créer le webhook GitHub vers Jenkins
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/{{ github_owner }}/{{ app_repo }}/hooks"
+    method: POST
+    headers:
+      Accept: application/vnd.github+json
+      Authorization: "Bearer {{ github_token }}"
+      X-GitHub-Api-Version: "2022-11-28"
+    body_format: json
+    body:
+      name: web
+      active: true
+      events: [push, pull_request]
+      config:
+        url: "{{ github_webhook_url }}"
+        content_type: json
+        insecure_ssl: "0"
+    status_code: 201
+  when: github_webhook_jenkins | length == 0
+  no_log: true
+
+- name: Mettre à jour le webhook GitHub existant si sa configuration diffère
+  ansible.builtin.uri:
+    url: "{{ github_webhook_jenkins.url }}"
+    method: PATCH
+    headers:
+      Accept: application/vnd.github+json
+      Authorization: "Bearer {{ github_token }}"
+      X-GitHub-Api-Version: "2022-11-28"
+    body_format: json
+    body:
+      name: web
+      active: true
+      events: [push, pull_request]
+      config:
+        url: "{{ github_webhook_url }}"
+        content_type: json
+        insecure_ssl: "0"
+    status_code: 200
+  when:
+    - github_webhook_jenkins | length > 0
+    - github_webhook_jenkins.config.url != github_webhook_url or
+      github_webhook_jenkins.config.content_type != "json" or
+      github_webhook_jenkins.events | sort != ["pull_request", "push"] or
+      not github_webhook_jenkins.active
+  no_log: true

@@ -1,0 +1,89 @@
+# {{ ansible_managed }}
+# Jenkins Configuration as Code : Jenkins est entièrement reconstruit à partir de ce fichier
+jenkins:
+  systemMessage: "Usine DevOps · Events FST (IGL5 G2) — configurée par Ansible + JCasC"
+  numExecutors: {{ jenkins_num_executors }}
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: admin
+          password: "${JENKINS_ADMIN_PASSWORD}"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+  globalNodeProperties:
+    - envVars:
+        env:
+          - { key: NEXUS_URL,     value: "{{ nexus_internal_url }}" }
+          - { key: ECR_REGISTRY,  value: "{{ ecr_registry }}" }
+          - { key: AWS_REGION,    value: "{{ aws_region }}" }
+          - { key: PLATFORM_REPO, value: "{{ platform_repo }}" }
+          - { key: GITOPS_BRANCH, value: "{{ gitops_branch }}" }
+          - { key: ARGOCD_SERVER, value: "{{ argocd_server | default('') }}" }
+          - { key: APPS_DOMAIN,   value: "{{ apps_domain | default('') }}" }
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - usernamePassword:
+              scope: GLOBAL
+              id: nexus-credentials
+              username: admin
+              password: "${NEXUS_PASSWORD}"
+          - usernamePassword:
+              scope: GLOBAL
+              id: github-credentials
+              username: "${GITHUB_USER}"
+              password: "${GITHUB_TOKEN}"
+          - string:
+              scope: GLOBAL
+              id: argocd-token
+              secret: "${ARGOCD_TOKEN}"
+          - string:
+              scope: GLOBAL
+              id: sonar-token
+              secret: "${SONAR_TOKEN}"
+          - string:
+              scope: GLOBAL
+              id: slack-token
+              secret: "${SLACK_BOT_TOKEN}"
+
+unclassified:
+  location:
+    url: "https://jenkins.{{ base_domain }}/"
+  sonarGlobalConfiguration:
+    buildWrapperEnabled: true
+    installations:
+      - name: sonarqube
+        serverUrl: "http://sonarqube:9000"
+        credentialsId: sonar-token
+  slackNotifier:
+    botUser: true
+    tokenCredentialId: slack-token
+    room: "#igl5-g2-ci"
+
+# Le job Multibranch est lui aussi du code : il découvre toutes les branches GitFlow,
+# sauf gitops (écrite par Jenkins lui-même : la construire créerait une boucle).
+jobs:
+  - script: >
+      multibranchPipelineJob('events-project') {
+        displayName('Events Project · FST IGL5 G2')
+        branchSources {
+          github {
+            id('events-github')
+            repoOwner('{{ github_owner }}')
+            repository('{{ app_repo }}')
+            scanCredentialsId('github-credentials')
+            includes('*')
+            excludes('{{ gitops_branch }}')
+          }
+        }
+        orphanedItemStrategy {
+          discardOldItems { numToKeep(5) }
+        }
+        triggers {
+          periodicFolderTrigger { interval('5m') }
+        }
+      }

@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+# Certificats Let's Encrypt automatiques (sslip.io : DNS public sans nom de domaine)
+jenkins.{$BASE_DOMAIN} {
+	reverse_proxy jenkins:8080
+}
+sonar.{$BASE_DOMAIN} {
+	reverse_proxy sonarqube:9000
+}
+nexus.{$BASE_DOMAIN} {
+	reverse_proxy nexus:8081
+}

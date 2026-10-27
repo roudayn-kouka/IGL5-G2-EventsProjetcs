@@ -3,7 +3,7 @@ services:
     image: mysql:8
     container_name: mysql-db
     environment:
-      MYSQL_ROOT_PASSWORD: root1234
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Copiez .env.example vers .env et définissez MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: eventsdb
     ports:
       - "3307:3306"
@@ -11,14 +11,14 @@ services:
       - mysql_data:/var/lib/mysql
 
   app:
-    image: ahlem12/events-project:1.0
+    build: .
     container_name: events-app
     ports:
-      - "9090:8080"
+      - "9090:8089"
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/eventsdb?useSSL=false&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root1234
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Copiez .env.example vers .env et définissez MYSQL_ROOT_PASSWORD}
     depends_on:
       - db
     restart: on-failure

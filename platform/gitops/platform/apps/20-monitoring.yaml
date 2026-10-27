@@ -1,0 +1,80 @@
+# Prometheus (collecte + règles) · Alertmanager (routage des alertes) · Grafana (visualisation)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 66.3.1
+    helm:
+      valuesObject:
+        prometheus:
+          prometheusSpec:
+            # Découvrir TOUS les ServiceMonitor / PrometheusRule (un par environnement Events)
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+            retention: 7d
+        grafana:
+          defaultDashboardsTimezone: Africa/Tunis
+          admin:
+            existingSecret: grafana-admin          # créé par Terraform
+            userKey: admin-user
+            passwordKey: admin-password
+          sidecar:
+            dashboards:
+              enabled: true
+              label: grafana_dashboard
+              searchNamespace: ALL
+          ingress:
+            enabled: false
+        alertmanager:
+          alertmanagerSpec:
+            secrets: [alertmanager-slack]            # créé par Terraform, monté dans /etc/alertmanager/secrets/
+          config:
+            route:
+              receiver: slack-alertes
+              group_by: [alertname, namespace]
+              group_wait: 30s
+              group_interval: 5m
+              repeat_interval: 4h
+              routes:
+                - receiver: "null"
+                  matchers: [alertname = "Watchdog"]
+                - receiver: slack-critique
+                  matchers: [severity = "critical"]
+            inhibit_rules:
+              # Si l'application est DOWN, inutile d'alerter aussi sur sa latence ou ses erreurs
+              - source_matchers: [alertname = "EventsAppDown"]
+                target_matchers: [severity = "warning"]
+                equal: [namespace]
+            receivers:
+              - name: "null"
+              - name: slack-alertes
+                slack_configs:
+                  - api_url_file: /etc/alertmanager/secrets/alertmanager-slack/webhook-url
+                    channel: "#igl5-g2-alertes"
+                    send_resolved: true
+                    title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }} · {{ .CommonLabels.namespace }}'
+                    text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ "\n" }}{{ end }}'
+              - name: slack-critique
+                slack_configs:
+                  - api_url_file: /etc/alertmanager/secrets/alertmanager-slack/webhook-url
+                    channel: "#igl5-g2-alertes"
+                    send_resolved: true
+                    title: ':rotating_light: CRITIQUE · {{ .CommonLabels.alertname }} · {{ .CommonLabels.namespace }}'
+                    text: '{{ range .Alerts }}{{ .Annotations.summary }} — {{ .Annotations.description }}{{ "\n" }}{{ end }}'
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true      # CRD volumineuses de kube-prometheus-stack
