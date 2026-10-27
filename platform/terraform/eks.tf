@@ -17,9 +17,12 @@ module "eks" {
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
 
-  # AWS Academy : réutiliser LabRole au lieu de créer des rôles IAM
+  # AWS Academy : réutiliser LabRole au lieu de créer des rôles IAM, et pas de
+  # fournisseur OIDC IAM (IRSA). Aucun pod n'utilise IRSA : le pilote EBS CSI
+  # s'appuie sur le rôle des nœuds dans les deux modes.
   create_iam_role = !local.use_lab_role
   iam_role_arn    = local.use_lab_role ? var.lab_role_arn : null
+  enable_irsa     = !local.use_lab_role
 
   cluster_addons = {
     coredns            = {}

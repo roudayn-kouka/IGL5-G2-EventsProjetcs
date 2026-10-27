@@ -1,0 +1,32 @@
+# =============================================================================
+#  AWS Academy (Learner Lab) : copier en terraform.tfvars (ignoré par Git)
+#    cp terraform.tfvars.academy.example terraform.tfvars
+#  Limites du lab : régions us-east-1 / us-west-2, instances « large » au maximum,
+#  9 instances et 32 vCPU au total, aucune création de rôle IAM.
+#  Mode lab = lab_role_arn non vide : LabRole pour EKS et ses nœuds,
+#  LabInstanceProfile pour l'EC2 DevOps, pas de fournisseur OIDC (IRSA).
+# =============================================================================
+region = "us-east-1" # ou us-west-2; doit être la région de « aws configure get region »
+
+# ARN de LabRole : aws iam get-role --role-name LabRole --query Role.Arn --output text
+lab_role_arn = "arn:aws:iam::<compte>:role/LabRole"
+
+# Tailles « large » au maximum : 1 EC2 DevOps + 2 à 4 nœuds EKS = 5 instances, 10 vCPU au plus
+devops_instance_type = "t3.large" # 8 Go : Ansible active le profil mémoire réduite (swap 8 Go)
+node_instance_type   = "t3.large"
+
+# Version Kubernetes : choisir une version en support STANDARD. Une version en support
+# étendu est facturée 6 fois plus (0,60 $/h au lieu de 0,10 $/h pour le plan de contrôle)
+# et consomme vite le crédit du lab. Lister les versions et leur statut :
+#   aws eks describe-cluster-versions --region us-east-1 \
+#     --query 'clusterVersions[?versionStatus==`STANDARD_SUPPORT`].[clusterVersion,endOfStandardSupportDate]' \
+#     --output table
+# Prendre la plus récente des versions STANDARD_SUPPORT (valeur ci-dessous à vérifier).
+cluster_version = "1.34"
+
+platform_repo_url      = "https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git"
+admin_cidr             = "196.203.10.20/32" # votre IP publique : curl -s https://checkip.amazonaws.com
+ssh_public_key_path    = "~/.ssh/id_ed25519.pub"
+grafana_admin_password = "change-me"
+slack_bot_token        = "xoxb-..."                             # Argo CD Notifications
+slack_webhook_url      = "https://hooks.slack.com/services/..." # Alertmanager
