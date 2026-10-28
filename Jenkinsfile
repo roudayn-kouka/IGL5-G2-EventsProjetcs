@@ -39,7 +39,9 @@ pipeline {
         ARGOCD_OPTS   = '--grpc-web --plaintext'
 
         PLATFORM_REPO = 'AhlemMastouri/Events-Platform'   // owner/repo uniquement
-        GITOPS_BRANCH = 'main'                            // branche suivie par Argo CD
+        GITOPS_BRANCH = 'main'     
+        ARGOCD_SERVER = 'host.docker.internal:8085'
+        ARGOCD_OPTS   = '--grpc-web --insecure'    // ou --plaintext si l'URL était en http                       // branche suivie par Argo CD
     }
 
     
