@@ -51,7 +51,14 @@
             <artifactId>lombok</artifactId>
             <scope>provided</scope>
         </dependency>
-
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
         <!-- Tests : JUnit 4 + Mockito + Spring Test + H2 (base en mémoire) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
