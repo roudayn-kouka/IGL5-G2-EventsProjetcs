@@ -212,19 +212,28 @@ pipeline {
         }
 
         // ------------------------------------------------------------ 10
+        // ------------------------------------------------------------ 10
         stage('Push image · Amazon ECR') {
             when { expression { env.DEPLOY == 'true' } }
             steps {
-                // Authentification par le rôle IAM de l'EC2 : aucune clé AWS dans Jenkins
-                sh '''
-                  aws ecr get-login-password --region "$AWS_REGION" \
-                    | docker login --username AWS --password-stdin "$ECR_REGISTRY"
-                  docker push "$IMAGE"
-                  docker logout "$ECR_REGISTRY"
-                '''
+                withCredentials([
+                    string(credentialsId: 'aws-access-key-id',     variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY'),
+                    string(credentialsId: 'aws-session-token',     variable: 'AWS_SESSION_TOKEN')
+                ]) {
+                    sh '''
+                      # Vérifie les identifiants avant le login (message d'erreur plus clair)
+                      aws sts get-caller-identity --region "$AWS_REGION" >/dev/null \
+                        || { echo "Identifiants AWS invalides ou expirés : mettez à jour les 3 credentials Jenkins."; exit 1; }
+
+                      aws ecr get-login-password --region "$AWS_REGION" \
+                        | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+                      docker push "$IMAGE"
+                      docker logout "$ECR_REGISTRY"
+                    '''
+                }
             }
         }
-
         // ------------------------------------------------------------ 11
         stage('Approbation production') {
             when { expression { env.BRANCH_TYPE == 'main' } }
