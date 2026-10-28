@@ -1,23 +1,23 @@
 // =============================================================================
-//  Events Project · FST · IGL5 G2 — Pipeline CI/CD/DevSecOps (GitOps)
+//  Events Project - FST - IGL5 G2 - Pipeline CI/CD/DevSecOps (GitOps)
 //
-//  UN SEUL Jenkinsfile pour TOUTES les branches (job Jenkins « Multibranch Pipeline »).
-//  Répartition des rôles :
-//    Jenkins  = intégration continue + sécurité + publication + PROMOTION GitOps
-//    Argo CD  = déploiement (modèle « pull ») : il lit le dépôt plateforme et applique sur EKS
-//  => Jenkins n'a AUCUN accès au cluster Kubernetes.
+//  UN SEUL Jenkinsfile pour TOUTES les branches (job Jenkins Multibranch Pipeline).
+//  Repartition des roles :
+//    Jenkins  = integration continue + securite + publication + PROMOTION GitOps
+//    Argo CD  = deploiement (modele pull) : il lit le depot plateforme et applique sur le cluster
+//  => Jenkins n'a AUCUN acces au cluster Kubernetes.
 //
-//  Contexte déduit du nom de branche (GitFlow) :
-//    feature/<nom>  -> environnement éphémère  events-<nom>
+//  Contexte deduit du nom de branche (GitFlow) :
+//    feature/<nom>  -> environnement ephemere  events-<nom>
 //    develop        -> events-staging
-//    release/x.y.z  -> events-staging (gate sécurité strict)
+//    release/x.y.z  -> events-staging (gate securite strict)
 //    main           -> events-prod    (gate strict + APPROBATION manuelle)
-//    PR-*           -> intégration continue seulement
+//    PR-*           -> integration continue seulement
 //
-//  Variables globales (injectées par Ansible via Jenkins Configuration as Code) :
-//    NEXUS_URL, ECR_REGISTRY, AWS_REGION, PLATFORM_REPO, GITOPS_BRANCH, ARGOCD_SERVER, APPS_DOMAIN
-//  Credentials : nexus-credentials, github-credentials, argocd-token, sonar-token (serveur « sonarqube »)
-//                aws-access-key-id, aws-secret-access-key, aws-session-token (Secret text, Learner Lab)
+//  Variables globales (Jenkins Configuration as Code / Manage Jenkins) :
+//    NEXUS_URL, ECR_REGISTRY, AWS_REGION, APPS_DOMAIN
+//  Credentials : nexus-credentials, github-credentials, argocd-token, sonar-token (serveur sonarqube)
+//                aws_access_key_id, aws_secret_access_key, aws_session_token (Secret text, Learner Lab)
 // =============================================================================
 
 pipeline {
@@ -29,7 +29,8 @@ pipeline {
         timeout(time: 45, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '15', artifactNumToKeepStr: '5'))
         disableConcurrentBuilds()
-    }    
+    }
+
     environment {
         APP_NAME      = 'events-app'
         TRIVY_IMAGE   = 'aquasec/trivy:0.56.2'
@@ -37,37 +38,12 @@ pipeline {
         ZAP_IMAGE     = 'ghcr.io/zaproxy/zaproxy:stable'
         SONAR_PLUGIN  = 'org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922'
         MVN           = 'mvn -B -ntp'
-      
 
         PLATFORM_REPO = 'AhlemMastouri/Events-Platform'   // owner/repo uniquement
-        GITOPS_BRANCH = 'main'     
-        ARGOCD_SERVER = 'host.docker.internal:8085'
-        ARGOCD_OPTS   = '--grpc-web --insecure'    // ou --plaintext si l'URL était en http                       // branche suivie par Argo CD
+        GITOPS_BRANCH = 'main'                            // branche suivie par Argo CD
+        ARGOCD_SERVER = 'host.docker.internal:8085'       // hote:port, sans http://
+        ARGOCD_OPTS   = '--grpc-web --insecure'           // --plaintext si Argo CD repond en http
     }
-
-        options {
-        timestamps()
-        ansiColor('xterm')
-        timeout(time: 45, unit: 'MINUTES')
-        buildDiscarder(logRotator(numToKeepStr: '15', artifactNumToKeepStr: '5'))
-        disableConcurrentBuilds()
-    }
-
-    environment {
-        APP_NAME      = 'events-app'
-        TRIVY_IMAGE   = 'aquasec/trivy:0.56.2'
-        GITLEAKS_IMG  = 'zricethezav/gitleaks:v8.21.2'
-        ZAP_IMAGE     = 'ghcr.io/zaproxy/zaproxy:stable'
-        SONAR_PLUGIN  = 'org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922'
-        MVN           = 'mvn -B -ntp'
-
-        PLATFORM_REPO = 'AhlemMastouri/Events-Platform'
-        GITOPS_BRANCH = 'main'                        // branche suivie par Argo CD
-        ARGOCD_SERVER = 'host.docker.internal:8085'
-        ARGOCD_OPTS   = '--grpc-web --insecure'       // --plaintext si Argo CD répond en http
-    }
-
-    stages {
 
     stages {
 
@@ -99,20 +75,20 @@ pipeline {
                     env.SONAR_KEY     = "fst-events-${env.FEATURE_SLUG}"
                     env.APP_HOST      = "${env.ENV_NAME}.${env.APPS_DOMAIN ?: 'apps.local'}"
 
-                    currentBuild.displayName = "#${env.BUILD_NUMBER} · ${env.FEATURE_SLUG}"
-                    currentBuild.description = "${env.OWNER} · ${env.GIT_SHORT} · ${env.K8S_NAMESPACE}"
+                    currentBuild.displayName = "#${env.BUILD_NUMBER} - ${env.FEATURE_SLUG}"
+                    currentBuild.description = "${env.OWNER} - ${env.GIT_SHORT} - ${env.K8S_NAMESPACE}"
 
                     echo """
-                    ┌──────────────────────── Contexte ────────────────────────
-                    │ Branche        : ${branch}  (${env.BRANCH_TYPE})
-                    │ Responsable    : ${env.OWNER}
-                    │ Version Maven  : ${env.APP_VERSION}
-                    │ Image          : ${env.IMAGE}
-                    │ Projet Sonar   : ${env.SONAR_KEY}
-                    │ Environnement  : ${env.K8S_NAMESPACE}  (profil ${env.HELM_PROFILE})
-                    │ URL            : http://${env.APP_HOST}/events/
-                    │ Gate sécurité  : ${env.SECURITY_GATE}
-                    └──────────────────────────────────────────────────────────"""
+                    ---------------------- Contexte ----------------------
+                     Branche        : ${branch}  (${env.BRANCH_TYPE})
+                     Responsable    : ${env.OWNER}
+                     Version Maven  : ${env.APP_VERSION}
+                     Image          : ${env.IMAGE}
+                     Projet Sonar   : ${env.SONAR_KEY}
+                     Environnement  : ${env.K8S_NAMESPACE}  (profil ${env.HELM_PROFILE})
+                     URL            : http://${env.APP_HOST}/events/
+                     Gate securite  : ${env.SECURITY_GATE}
+                    ------------------------------------------------------"""
                 }
             }
         }
@@ -128,7 +104,7 @@ pipeline {
         // ------------------------------------------------------------ 3
         stage('Tests & couverture') {
             steps {
-                // Tests avec Mockito + tests d'intégration (H2) + rapport JaCoCo + JAR exécutable
+                // Tests avec Mockito + tests d'integration (H2) + rapport JaCoCo + JAR executable
                 sh "${MVN} verify"
             }
             post {
@@ -141,11 +117,11 @@ pipeline {
         }
 
         // ------------------------------------------------------------ 4
-        stage('Sécurité du code') {
+        stage('Securite du code') {
             parallel {
-                stage('Secrets · Gitleaks') {
+                stage('Secrets - Gitleaks') {
                     steps {
-                        // Bloquant partout : un secret commité n'est jamais acceptable
+                        // Bloquant partout : un secret commite n'est jamais acceptable
                         sh '''
                           docker run --rm -v "$WORKSPACE:/repo" $GITLEAKS_IMG detect \
                             --source /repo --redact --no-banner \
@@ -153,7 +129,7 @@ pipeline {
                         '''
                     }
                 }
-                stage('Dépendances & IaC · Trivy FS') {
+                stage('Dependances & IaC - Trivy FS') {
                     steps {
                         sh '''
                           docker run --rm -v "$WORKSPACE:/src" -v trivy-cache:/root/.cache $TRIVY_IMAGE fs \
@@ -173,7 +149,7 @@ pipeline {
                     sh """
                       ${MVN} ${SONAR_PLUGIN}:sonar \
                         -Dsonar.projectKey=${SONAR_KEY} \
-                        -Dsonar.projectName='Events · ${FEATURE_SLUG}' \
+                        -Dsonar.projectName='Events - ${FEATURE_SLUG}' \
                         -Dsonar.projectVersion=${APP_VERSION} \
                         -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
                     """
@@ -191,7 +167,7 @@ pipeline {
         }
 
         // ------------------------------------------------------------ 7
-        stage('Publication JAR · Nexus') {
+        stage('Publication JAR - Nexus') {
             when { expression { env.DEPLOY == 'true' } }
             steps {
                 script {
@@ -223,7 +199,7 @@ pipeline {
         }
 
         // ------------------------------------------------------------ 9
-        stage('Scan image · Trivy') {
+        stage('Scan image - Trivy') {
             when { expression { env.DEPLOY == 'true' } }
             steps {
                 script {
@@ -241,23 +217,23 @@ pipeline {
         }
 
         // ------------------------------------------------------------ 10
-        stage('Push image · Amazon ECR') {
+        stage('Push image - Amazon ECR') {
             when { expression { env.DEPLOY == 'true' } }
             steps {
-                // Identifiants temporaires du Learner Lab, stockés en « Secret text » dans Jenkins :
-                //   aws-access-key-id / aws-secret-access-key / aws-session-token
-                // Ils expirent (~4 h) : les mettre à jour à chaque nouvelle session du lab.
-             withCredentials([
-    string(credentialsId: 'aws_access_key_id',     variable: 'AWS_ACCESS_KEY_ID'),
-    string(credentialsId: 'aws_secret_access_key', variable: 'AWS_SECRET_ACCESS_KEY'),
-    string(credentialsId: 'aws_session_token',     variable: 'AWS_SESSION_TOKEN')
-]) {
+                // Identifiants temporaires du Learner Lab, stockes en Secret text dans Jenkins :
+                //   aws_access_key_id / aws_secret_access_key / aws_session_token
+                // Ils expirent (~4 h) : les mettre a jour a chaque nouvelle session du lab.
+                withCredentials([
+                    string(credentialsId: 'aws_access_key_id',     variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws_secret_access_key', variable: 'AWS_SECRET_ACCESS_KEY'),
+                    string(credentialsId: 'aws_session_token',     variable: 'AWS_SESSION_TOKEN')
+                ]) {
                     sh '''
                       set -e
 
                       # Identifiants valides ? (message clair en cas d'expiration)
                       aws sts get-caller-identity --region "$AWS_REGION" >/dev/null \
-                        || { echo "Identifiants AWS invalides ou expirés : mettez à jour les 3 credentials Jenkins."; exit 1; }
+                        || { echo "Identifiants AWS invalides ou expires : mettez a jour les 3 credentials Jenkins."; exit 1; }
 
                       aws ecr get-login-password --region "$AWS_REGION" \
                         | docker login --username AWS --password-stdin "$ECR_REGISTRY"
@@ -284,8 +260,8 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'github-credentials',
                                                   usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
-                    // Jenkins ne déploie pas : il décrit l'état voulu sur la branche gitops.
-                    // L'ApplicationSet Argo CD crée automatiquement l'environnement s'il est nouveau.
+                    // Jenkins ne deploie pas : il decrit l'etat voulu dans le depot plateforme.
+                    // L'ApplicationSet Argo CD cree automatiquement l'environnement s'il est nouveau.
                     sh '''
                       rm -rf gitops-work
                       AUTH_HEADER="AUTHORIZATION: basic $(printf '%s' "$GIT_USER:$GIT_TOKEN" | base64 | tr -d '\n')"
@@ -301,7 +277,7 @@ pipeline {
 { "namespace": "$K8S_NAMESPACE", "profile": "$HELM_PROFILE", "owner": "$OWNER_SLUG" }
 EOF
                       cat > "$ENV_DIR/values.yaml" <<EOF
-# Généré par Jenkins — build #$BUILD_NUMBER — commit $GIT_SHORT — ne pas modifier à la main
+# Genere par Jenkins - build #$BUILD_NUMBER - commit $GIT_SHORT - ne pas modifier a la main
 feature: $FEATURE_SLUG
 owner: $OWNER_SLUG
 image:
@@ -314,9 +290,9 @@ EOF
                       git config user.name  "Jenkins FST"
                       git config user.email "jenkins@fst-events.local"
                       git add "envs/$ENV_NAME"
-                      git diff --cached --quiet || git commit -m "deploy($ENV_NAME): $IMAGE_TAG [build #$BUILD_NUMBER · $OWNER]"
+                      git diff --cached --quiet || git commit -m "deploy($ENV_NAME): $IMAGE_TAG [build #$BUILD_NUMBER - $OWNER]"
 
-                      # Plusieurs membres peuvent promouvoir en même temps : rebase puis nouvel essai
+                      # Plusieurs membres peuvent promouvoir en meme temps : rebase puis nouvel essai
                       PUSHED=false
                       for i in 1 2 3 4 5; do
                         if git push origin "HEAD:$GITOPS_BRANCH"; then
@@ -328,7 +304,7 @@ EOF
                         fi
                       done
                       if [ "$PUSHED" != true ]; then
-                        echo "Échec du push GitOps après cinq tentatives."
+                        echo "Echec du push GitOps apres cinq tentatives."
                         exit 1
                       fi
                       git rev-parse HEAD > ../gitops-revision.txt
@@ -342,7 +318,7 @@ EOF
             when { expression { env.DEPLOY == 'true' } }
             steps {
                 withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
-                    // On attend qu'Argo CD ait appliqué EXACTEMENT notre révision et que l'appli soit saine
+                    // On attend qu'Argo CD ait applique EXACTEMENT notre revision et que l'appli soit saine
                     sh '''
                       APP="events-$ENV_NAME"
                       WANTED=$(cat gitops-revision.txt)
@@ -352,23 +328,23 @@ EOF
                         REV_MATCH=$(echo "$J" | jq -r --arg wanted "$WANTED" '(.status.sync.revisions // []) | index($wanted) != null')
                         SYNC=$(echo "$J" | jq -r '.status.sync.status // empty')
                         HEALTH=$(echo "$J" | jq -r '.status.health.status // empty')
-                        echo "[$i] $APP révisions=$REV commit-attendu=$REV_MATCH sync=$SYNC santé=$HEALTH"
+                        echo "[$i] $APP revisions=$REV commit-attendu=$REV_MATCH sync=$SYNC sante=$HEALTH"
                         if [ "$REV_MATCH" = "true" ] && [ "$SYNC" = "Synced" ] && [ "$HEALTH" = "Healthy" ]; then
-                          echo "Déployé et sain."; exit 0
+                          echo "Deploye et sain."; exit 0
                         fi
                         if [ "$REV_MATCH" = "true" ] && [ "$HEALTH" = "Degraded" ]; then
-                          echo "Déploiement dégradé : voir l'interface Argo CD."; exit 1
+                          echo "Deploiement degrade : voir l'interface Argo CD."; exit 1
                         fi
                         sleep 10
                       done
-                      echo "Délai dépassé (10 min)."; exit 1
+                      echo "Delai depasse (10 min)."; exit 1
                     '''
                 }
             }
         }
 
         // ------------------------------------------------------------ 14
-        stage('Tests post-déploiement') {
+        stage('Tests post-deploiement') {
             when { expression { env.DEPLOY == 'true' } }
             parallel {
                 stage('Smoke tests') {
@@ -386,17 +362,17 @@ EOF
                           for endpoint in "$BASE/event-stats/summary" "$BASE/event/"; do
                             STATUS=$(curl -sS -o /dev/null -w '%{http_code}' "$endpoint" || true)
                             if [ "$STATUS" = "404" ]; then
-                              echo "AVERTISSEMENT : endpoint métier absent sur cette feature : $endpoint"
+                              echo "AVERTISSEMENT : endpoint metier absent sur cette feature : $endpoint"
                             elif [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
-                              echo "Endpoint métier disponible : $endpoint (HTTP $STATUS)"
+                              echo "Endpoint metier disponible : $endpoint (HTTP $STATUS)"
                             else
-                              echo "AVERTISSEMENT : endpoint métier $endpoint retourne HTTP $STATUS"
+                              echo "AVERTISSEMENT : endpoint metier $endpoint retourne HTTP $STATUS"
                             fi
                           done
                         '''
                     }
                 }
-                stage('DAST · OWASP ZAP') {
+                stage('DAST - OWASP ZAP') {
                     steps {
                         script {
                             def tolerate = (env.SECURITY_GATE == 'strict') ? '' : ' || true'
@@ -417,7 +393,7 @@ EOF
         success {
             script {
                 if (env.DEPLOY == 'true') {
-                    echo "${env.FEATURE_SLUG} déployée : http://${env.APP_HOST}/events/  (Grafana : feature = ${env.K8S_NAMESPACE})"
+                    echo "${env.FEATURE_SLUG} deployee : http://${env.APP_HOST}/events/  (Grafana : feature = ${env.K8S_NAMESPACE})"
                 }
                 notifyTeam('SUCCESS', 'good')
             }
@@ -429,7 +405,7 @@ EOF
 }
 
 // =============================================================================
-//  Fonctions utilitaires — la répartition des features est centralisée ICI
+//  Fonctions utilitaires - la repartition des features est centralisee ICI
 // =============================================================================
 
 def ownerOf(String branch) {
@@ -480,7 +456,7 @@ def slugify(String s) {
 }
 
 def notifyTeam(String status, String color) {
-    def msg = "${status} · ${env.FEATURE_SLUG} (#${env.BUILD_NUMBER}) · ${env.OWNER} · ${env.BUILD_URL}"
+    def msg = "${status} - ${env.FEATURE_SLUG} (#${env.BUILD_NUMBER}) - ${env.OWNER} - ${env.BUILD_URL}"
     try {
         slackSend(channel: '#igl5-g2-ci', color: color, message: msg)
     } catch (Exception ignored) {
