@@ -113,27 +113,26 @@ pipeline {
 
         // ------------------------------------------------------------ 4
         stage('Sécurité du code') {
-            parallel {
-                stage('Secrets · Gitleaks') {
-                    steps {
-                        // Bloquant partout : un secret commité n'est jamais acceptable
-                        sh '''
-                          docker run --rm -v "$WORKSPACE:/repo" $GITLEAKS_IMG detect \
-                            --source /repo --redact --no-banner \
-                            --report-format json --report-path /repo/gitleaks-report.json
-                        '''
-                    }
-                }
-                stage('Dépendances & IaC · Trivy FS') {
-                    steps {
-                        sh '''
-                          docker run --rm -v "$WORKSPACE:/src" -v trivy-cache:/root/.cache $TRIVY_IMAGE fs \
-                            --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 0 \
-                            --format table --output /src/trivy-fs.txt /src
-                          cat trivy-fs.txt
-                        '''
-                    }
-                }
+                    parallel {
+                        stage('Secrets · Gitleaks') {
+            steps {
+                sh '''
+                docker run --rm --volumes-from jenkins $GITLEAKS_IMG detect \
+                    --source "$WORKSPACE" --redact --no-banner \
+                    --report-format json --report-path "$WORKSPACE/gitleaks-report.json"
+                '''
+            }
+        }
+        stage('Dépendances & IaC · Trivy FS') {
+            steps {
+                sh '''
+                docker run --rm --volumes-from jenkins -v trivy-cache:/root/.cache $TRIVY_IMAGE fs \
+                    --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 0 \
+                    --format table --output "$WORKSPACE/trivy-fs.txt" "$WORKSPACE"
+                cat trivy-fs.txt
+                '''
+            }
+        }
             }
         }
 
