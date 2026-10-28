@@ -31,13 +31,17 @@ pipeline {
         disableConcurrentBuilds()
     }
 
-    environment {
+       environment {
         APP_NAME      = 'events-app'
         TRIVY_IMAGE   = 'aquasec/trivy:0.56.2'
         GITLEAKS_IMG  = 'zricethezav/gitleaks:v8.21.2'
         ZAP_IMAGE     = 'ghcr.io/zaproxy/zaproxy:stable'
         SONAR_PLUGIN  = 'org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922'
         MVN           = 'mvn -B -ntp'
+
+        // Miroir ECR public : plus fiable que ghcr.io pour la base Trivy
+        TRIVY_DB_REPOSITORY      = 'public.ecr.aws/aquasecurity/trivy-db:2'
+        TRIVY_JAVA_DB_REPOSITORY = 'public.ecr.aws/aquasecurity/trivy-java-db:1'
 
         PLATFORM_REPO = 'AhlemMastouri/Events-Platform'   // owner/repo uniquement
         GITOPS_BRANCH = 'main'                            // branche suivie par Argo CD
@@ -129,17 +133,19 @@ pipeline {
                         '''
                     }
                 }
-                stage('Dependances & IaC - Trivy FS') {
-                    steps {
+               stage('Dependances & IaC - Trivy FS') {
+                steps {
+                    retry(3) {
                         sh '''
-                          docker run --rm -v "$WORKSPACE:/src" -v trivy-cache:/root/.cache $TRIVY_IMAGE fs \
+                        docker run --rm -e TRIVY_DB_REPOSITORY -e TRIVY_JAVA_DB_REPOSITORY \
+                            -v "$WORKSPACE:/src" -v trivy-cache:/root/.cache $TRIVY_IMAGE fs \
                             --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 0 \
                             --format table --output /src/trivy-fs.txt /src
-                          cat trivy-fs.txt
+                        cat trivy-fs.txt
                         '''
-                    }
-                }
-            }
+        }
+    }
+}
         }
 
         // ------------------------------------------------------------ 5
