@@ -17,6 +17,7 @@
 //  Variables globales (injectées par Ansible via Jenkins Configuration as Code) :
 //    NEXUS_URL, ECR_REGISTRY, AWS_REGION, PLATFORM_REPO, GITOPS_BRANCH, ARGOCD_SERVER, APPS_DOMAIN
 //  Credentials : nexus-credentials, github-credentials, argocd-token, sonar-token (serveur « sonarqube »)
+//                aws-access-key-id, aws-secret-access-key, aws-session-token (Secret text, Learner Lab)
 // =============================================================================
 
 pipeline {
@@ -212,17 +213,21 @@ pipeline {
         }
 
         // ------------------------------------------------------------ 10
-        // ------------------------------------------------------------ 10
         stage('Push image · Amazon ECR') {
             when { expression { env.DEPLOY == 'true' } }
             steps {
+                // Identifiants temporaires du Learner Lab, stockés en « Secret text » dans Jenkins :
+                //   aws-access-key-id / aws-secret-access-key / aws-session-token
+                // Ils expirent (~4 h) : les mettre à jour à chaque nouvelle session du lab.
                 withCredentials([
                     string(credentialsId: 'aws-access-key-id',     variable: 'AWS_ACCESS_KEY_ID'),
                     string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY'),
                     string(credentialsId: 'aws-session-token',     variable: 'AWS_SESSION_TOKEN')
                 ]) {
                     sh '''
-                      # Vérifie les identifiants avant le login (message d'erreur plus clair)
+                      set -e
+
+                      # Identifiants valides ? (message clair en cas d'expiration)
                       aws sts get-caller-identity --region "$AWS_REGION" >/dev/null \
                         || { echo "Identifiants AWS invalides ou expirés : mettez à jour les 3 credentials Jenkins."; exit 1; }
 
@@ -234,6 +239,7 @@ pipeline {
                 }
             }
         }
+
         // ------------------------------------------------------------ 11
         stage('Approbation production') {
             when { expression { env.BRANCH_TYPE == 'main' } }
