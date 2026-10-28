@@ -16,6 +16,9 @@
 //
 //  Variables globales (Jenkins Configuration as Code / Manage Jenkins) :
 //    NEXUS_URL, ECR_REGISTRY, AWS_REGION, APPS_DOMAIN
+//  Variables globales OPTIONNELLES :
+//    PULL_SECRET   : nom d'un imagePullSecret (cluster kind local, ex: ecr-secret). Vide sur EKS.
+//    SLACK_ENABLED : 'true' pour activer les notifications Slack
 //  Credentials : nexus-credentials, github-credentials, argocd-token, sonar-token (serveur sonarqube)
 //                aws_access_key_id, aws_secret_access_key, aws_session_token (Secret text, Learner Lab)
 // =============================================================================
@@ -45,8 +48,10 @@ pipeline {
 
         PLATFORM_REPO = 'AhlemMastouri/Events-Platform'   // owner/repo uniquement
         GITOPS_BRANCH = 'main'                            // branche suivie par Argo CD
+        // Dossier des environnements dans le depot plateforme. DOIT correspondre au valueFiles
+        // de l'application Argo CD : 'envs' (racine) ou 'gitops/envs' selon la structure du depot.
+        GITOPS_ENVS_DIR = 'envs'
         ARGOCD_SERVER = 'host.docker.internal:8085'       // hote:port, sans http://
-        ARGOCD_OPTS   = '--grpc-web --insecure'           // --plaintext si Argo CD repond en http
     }
 
     stages {
@@ -247,6 +252,12 @@ pipeline {
                         | docker login --username AWS --password-stdin "$ECR_REGISTRY"
                       docker push "$IMAGE"
                       docker logout "$ECR_REGISTRY"
+
+                      # Verification : l'image est bien presente dans ECR avant de promouvoir
+                      aws ecr describe-images --region "$AWS_REGION" --repository-name "$APP_NAME" \
+                        --image-ids imageTag="$IMAGE_TAG" >/dev/null \
+                        || { echo "Image $IMAGE_TAG absente d'ECR apres le push."; exit 1; }
+                      echo "Image $IMAGE_TAG presente dans ECR."
                     '''
                 }
             }
@@ -271,6 +282,7 @@ pipeline {
                     // Jenkins ne deploie pas : il decrit l'etat voulu dans le depot plateforme.
                     // L'ApplicationSet Argo CD cree automatiquement l'environnement s'il est nouveau.
                     sh '''
+                      set -e
                       rm -rf gitops-work
                       AUTH_HEADER="AUTHORIZATION: basic $(printf '%s' "$GIT_USER:$GIT_TOKEN" | base64 | tr -d '\n')"
                       git -c http.extraheader="$AUTH_HEADER" \
@@ -278,7 +290,7 @@ pipeline {
                       trap 'cd "$WORKSPACE"; rm -rf gitops-work' EXIT
                       git -C gitops-work config http.extraheader "$AUTH_HEADER"
                       unset AUTH_HEADER
-                      ENV_DIR="gitops-work/envs/$ENV_NAME"
+                      ENV_DIR="gitops-work/$GITOPS_ENVS_DIR/$ENV_NAME"
                       mkdir -p "$ENV_DIR"
 
                       cat > "$ENV_DIR/config.json" <<EOF
@@ -294,10 +306,16 @@ image:
 ingress:
   host: $APP_HOST
 EOF
+                      # Cluster local (kind) : secret de pull ECR, defini par la variable globale PULL_SECRET.
+                      # Sur EKS la variable reste vide : les noeuds s'authentifient par leur role IAM.
+                      if [ -n "${PULL_SECRET:-}" ]; then
+                        printf 'imagePullSecrets:\n  - name: %s\n' "$PULL_SECRET" >> "$ENV_DIR/values.yaml"
+                      fi
+
                       cd gitops-work
                       git config user.name  "Jenkins FST"
                       git config user.email "jenkins@fst-events.local"
-                      git add "envs/$ENV_NAME"
+                      git add "$GITOPS_ENVS_DIR/$ENV_NAME"
                       git diff --cached --quiet || git commit -m "deploy($ENV_NAME): $IMAGE_TAG [build #$BUILD_NUMBER - $OWNER]"
 
                       # Plusieurs membres peuvent promouvoir en meme temps : rebase puis nouvel essai
@@ -326,22 +344,33 @@ EOF
             when { expression { env.DEPLOY == 'true' } }
             steps {
                 withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
-                    // On attend qu'Argo CD ait applique EXACTEMENT notre revision et que l'appli soit saine
+                    // On attend qu'Argo CD ait applique EXACTEMENT notre revision et que l'appli soit saine.
+                    // API REST (curl) au lieu de la CLI : les erreurs sont visibles dans le log.
+                    // Application a source unique => .status.sync.revision (et non .revisions).
                     sh '''
+                      set +x
                       APP="events-$ENV_NAME"
                       WANTED=$(cat gitops-revision.txt)
+                      URL="https://$ARGOCD_SERVER/api/v1/applications/$APP"
                       for i in $(seq 1 60); do
-                        J=$(argocd app get "$APP" --refresh -o json 2>/dev/null || true)
-                        REV=$(echo "$J" | jq -r '(.status.sync.revisions // []) | join(",")')
-                        REV_MATCH=$(echo "$J" | jq -r --arg wanted "$WANTED" '(.status.sync.revisions // []) | index($wanted) != null')
-                        SYNC=$(echo "$J" | jq -r '.status.sync.status // empty')
-                        HEALTH=$(echo "$J" | jq -r '.status.health.status // empty')
-                        echo "[$i] $APP revisions=$REV commit-attendu=$REV_MATCH sync=$SYNC sante=$HEALTH"
+                        CODE=$(curl -sk -o app.json -w '%{http_code}' \
+                          -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" "$URL?refresh=normal" || echo "000")
+                        if [ "$CODE" != "200" ]; then
+                          echo "[$i] Argo CD a repondu HTTP $CODE : $(head -c 300 app.json 2>/dev/null)"
+                          sleep 10
+                          continue
+                        fi
+                        REV_MATCH=$(jq -r --arg w "$WANTED" '([.status.sync.revision] + (.status.sync.revisions // [])) | index($w) != null' app.json)
+                        SYNC=$(jq -r '.status.sync.status // empty' app.json)
+                        HEALTH=$(jq -r '.status.health.status // empty' app.json)
+                        echo "[$i] $APP commit-attendu=$REV_MATCH sync=$SYNC sante=$HEALTH"
                         if [ "$REV_MATCH" = "true" ] && [ "$SYNC" = "Synced" ] && [ "$HEALTH" = "Healthy" ]; then
                           echo "Deploye et sain."; exit 0
                         fi
                         if [ "$REV_MATCH" = "true" ] && [ "$HEALTH" = "Degraded" ]; then
-                          echo "Deploiement degrade : voir l'interface Argo CD."; exit 1
+                          echo "Deploiement degrade. Ressources en erreur :"
+                          jq -r '.status.resources[]? | select(.health.status != null and .health.status != "Healthy") | "\\(.kind)/\\(.name): \\(.health.status) - \\(.health.message // "")"' app.json
+                          exit 1
                         fi
                         sleep 10
                       done
@@ -369,6 +398,7 @@ EOF
 
                           for endpoint in "$BASE/event-stats/summary" "$BASE/event/"; do
                             STATUS=$(curl -sS -o /dev/null -w '%{http_code}' "$endpoint" || true)
+                            STATUS=${STATUS:-000}
                             if [ "$STATUS" = "404" ]; then
                               echo "AVERTISSEMENT : endpoint metier absent sur cette feature : $endpoint"
                             elif [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
@@ -465,9 +495,13 @@ def slugify(String s) {
 
 def notifyTeam(String status, String color) {
     def msg = "${status} - ${env.FEATURE_SLUG} (#${env.BUILD_NUMBER}) - ${env.OWNER} - ${env.BUILD_URL}"
-    try {
-        slackSend(channel: '#igl5-g2-ci', color: color, message: msg)
-    } catch (Exception ignored) {
-        echo "Notification : ${msg}"
+    echo "Notification : ${msg}"
+    // Slack uniquement si active (SLACK_ENABLED=true) ET configure dans Manage Jenkins > System
+    if (env.SLACK_ENABLED == 'true') {
+        try {
+            slackSend(channel: '#igl5-g2-ci', color: color, message: msg)
+        } catch (Exception ignored) {
+            echo "Slack indisponible : ${ignored.message}"
+        }
     }
 }
