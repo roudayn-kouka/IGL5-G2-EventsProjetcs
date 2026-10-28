@@ -29,17 +29,20 @@ pipeline {
         timeout(time: 45, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '15', artifactNumToKeepStr: '5'))
         disableConcurrentBuilds()
+    }    environment {
+        APP_NAME      = 'events-app'
+        TRIVY_IMAGE   = 'aquasec/trivy:0.56.2'
+        GITLEAKS_IMG  = 'zricethezav/gitleaks:v8.21.2'
+        ZAP_IMAGE     = 'ghcr.io/zaproxy/zaproxy:stable'
+        SONAR_PLUGIN  = 'org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922'
+        MVN           = 'mvn -B -ntp'
+        ARGOCD_OPTS   = '--grpc-web --plaintext'
+
+        PLATFORM_REPO = 'AhlemMastouri/Events-Platform'   // owner/repo uniquement
+        GITOPS_BRANCH = 'main'                            // branche suivie par Argo CD
     }
 
-    environment {
-        APP_NAME     = 'events-app'
-        TRIVY_IMAGE  = 'aquasec/trivy:0.56.2'
-        GITLEAKS_IMG = 'zricethezav/gitleaks:v8.21.2'
-        ZAP_IMAGE    = 'ghcr.io/zaproxy/zaproxy:stable'
-        SONAR_PLUGIN = 'org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922'
-        MVN          = 'mvn -B -ntp'
-        ARGOCD_OPTS  = '--grpc-web --plaintext'
-    }
+    
 
     stages {
 
