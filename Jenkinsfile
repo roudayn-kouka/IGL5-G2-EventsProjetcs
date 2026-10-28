@@ -31,7 +31,7 @@ pipeline {
         disableConcurrentBuilds()
     }
 
-       environment {
+    environment {
         APP_NAME      = 'events-app'
         TRIVY_IMAGE   = 'aquasec/trivy:0.56.2'
         GITLEAKS_IMG  = 'zricethezav/gitleaks:v8.21.2'
@@ -133,19 +133,20 @@ pipeline {
                         '''
                     }
                 }
-               stage('Dependances & IaC - Trivy FS') {
-                steps {
-                    retry(3) {
-                        sh '''
-                        docker run --rm -e TRIVY_DB_REPOSITORY -e TRIVY_JAVA_DB_REPOSITORY \
-                            -v "$WORKSPACE:/src" -v trivy-cache:/root/.cache $TRIVY_IMAGE fs \
-                            --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 0 \
-                            --format table --output /src/trivy-fs.txt /src
-                        cat trivy-fs.txt
-                        '''
-        }
-    }
-}
+                stage('Dependances & IaC - Trivy FS') {
+                    steps {
+                        retry(3) {
+                            sh '''
+                              docker run --rm -e TRIVY_DB_REPOSITORY -e TRIVY_JAVA_DB_REPOSITORY \
+                                -v "$WORKSPACE:/src" -v trivy-cache:/root/.cache $TRIVY_IMAGE fs \
+                                --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 0 \
+                                --format table --output /src/trivy-fs.txt /src
+                              cat trivy-fs.txt
+                            '''
+                        }
+                    }
+                }
+            }
         }
 
         // ------------------------------------------------------------ 5
@@ -205,19 +206,23 @@ pipeline {
         }
 
         // ------------------------------------------------------------ 9
-   stage('Dependances & IaC - Trivy FS') {
-    steps {
-        retry(3) {
-            sh '''
-              docker run --rm -e TRIVY_DB_REPOSITORY -e TRIVY_JAVA_DB_REPOSITORY \
-                -v "$WORKSPACE:/src" -v trivy-cache:/root/.cache $TRIVY_IMAGE fs \
-                --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 0 \
-                --format table --output /src/trivy-fs.txt /src
-              cat trivy-fs.txt
-            '''
+        stage('Scan image - Trivy') {
+            when { expression { env.DEPLOY == 'true' } }
+            steps {
+                script {
+                    def exitCode = (env.SECURITY_GATE == 'strict') ? '1' : '0'
+                    sh """
+                      docker run --rm -e TRIVY_DB_REPOSITORY -e TRIVY_JAVA_DB_REPOSITORY \
+                        -v /var/run/docker.sock:/var/run/docker.sock \
+                        -v "\$WORKSPACE:/reports" -v trivy-cache:/root/.cache ${TRIVY_IMAGE} image \
+                        --severity CRITICAL --ignore-unfixed --exit-code ${exitCode} \
+                        --ignorefile /reports/.trivyignore \
+                        --format table --output /reports/trivy-image.txt ${IMAGE}
+                    """
+                    sh 'cat trivy-image.txt'
+                }
+            }
         }
-    }
-}
 
         // ------------------------------------------------------------ 10
         stage('Push image - Amazon ECR') {
