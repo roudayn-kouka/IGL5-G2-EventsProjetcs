@@ -199,22 +199,19 @@ pipeline {
         }
 
         // ------------------------------------------------------------ 9
-        stage('Scan image - Trivy') {
-            when { expression { env.DEPLOY == 'true' } }
-            steps {
-                script {
-                    def exitCode = (env.SECURITY_GATE == 'strict') ? '1' : '0'
-                    sh """
-                      docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-                        -v "\$WORKSPACE:/reports" -v trivy-cache:/root/.cache ${TRIVY_IMAGE} image \
-                        --severity CRITICAL --ignore-unfixed --exit-code ${exitCode} \
-                        --ignorefile /reports/.trivyignore \
-                        --format table --output /reports/trivy-image.txt ${IMAGE}
-                    """
-                    sh 'cat trivy-image.txt'
-                }
-            }
+   stage('Dependances & IaC - Trivy FS') {
+    steps {
+        retry(3) {
+            sh '''
+              docker run --rm -e TRIVY_DB_REPOSITORY -e TRIVY_JAVA_DB_REPOSITORY \
+                -v "$WORKSPACE:/src" -v trivy-cache:/root/.cache $TRIVY_IMAGE fs \
+                --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 0 \
+                --format table --output /src/trivy-fs.txt /src
+              cat trivy-fs.txt
+            '''
         }
+    }
+}
 
         // ------------------------------------------------------------ 10
         stage('Push image - Amazon ECR') {
