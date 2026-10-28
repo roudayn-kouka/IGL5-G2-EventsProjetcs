@@ -219,11 +219,11 @@ pipeline {
                 // Identifiants temporaires du Learner Lab, stockés en « Secret text » dans Jenkins :
                 //   aws-access-key-id / aws-secret-access-key / aws-session-token
                 // Ils expirent (~4 h) : les mettre à jour à chaque nouvelle session du lab.
-                withCredentials([
-                    string(credentialsId: 'aws-access-key-id',     variable: 'AWS_ACCESS_KEY_ID'),
-                    string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY'),
-                    string(credentialsId: 'aws-session-token',     variable: 'AWS_SESSION_TOKEN')
-                ]) {
+             withCredentials([
+    string(credentialsId: 'aws_access_key_id',     variable: 'AWS_ACCESS_KEY_ID'),
+    string(credentialsId: 'aws_secret_access_key', variable: 'AWS_SECRET_ACCESS_KEY'),
+    string(credentialsId: 'aws_session_token',     variable: 'AWS_SESSION_TOKEN')
+]) {
                     sh '''
                       set -e
 
