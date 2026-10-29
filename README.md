@@ -375,7 +375,7 @@ flowchart LR
 | `main` | Application + `platform/`. Source de l'application racine Argo CD (`platform/gitops/platform/apps`) et du chart Helm. | Oui | `events-prod` après approbation manuelle |
 | `develop` | Intégration des features. | Oui | `events-staging` |
 | `feature/*` | Une fonctionnalité par membre; fusion dans `develop` par Pull Request (PR = CI sans déploiement). | Oui | `events-<feature>` (environnement éphémère) |
-| `release/*`, `hotfix/*` | Stabilisation d'une version / correctif urgent vers `main`. | Oui (Trivy strict) | Aucun |
+| `release/*`, `hotfix/*` | Stabilisation d'une version / correctif urgent vers `main`. | Oui (Trivy et ZAP stricts sur `release/*` seulement) | `events-staging` |
 | `gitops` | Orpheline : uniquement `envs/<env>/{config.json,values.yaml}` et un README. | **Non** (exclue du Multibranch) | Lue par Argo CD |
 
 **Pourquoi `gitops` est séparée.** Jenkins pousse un commit à chaque déploiement. Sur `main` ou `develop`, ce commit déclencherait le webhook, donc un nouveau build, qui pousserait à nouveau : une boucle infinie, plus un historique applicatif pollué par des commits de déploiement. Sur une branche orpheline sans Jenkinsfile et exclue du job Multibranch (`excludes('gitops')`), le commit de promotion ne déclenche rien côté Jenkins; seul Argo CD le lit. Le chart reste versionné avec le code sur `main`, l'état des environnements est versionné à part : un retour arrière de déploiement est un simple `git revert` sur `gitops`.
@@ -387,21 +387,21 @@ Les numéros sont ceux du rapport de projet : l'étape 0 est le déclenchement w
 | Nº | Stage Jenkins | Outil(s) | Traitement | Produit | Bloquant ? | Jenkinsfile |
 |---:|---|---|---|---|---|---:|
 | 0 | Déclenchement (hors stage) | GitHub, Jenkins Multibranch | Webhook push/PR et découverte de branche. | Exécution Jenkins | Déclencheur | `platform/ansible/roles/github_webhook/`; JCasC |
-| 1 | `Contexte & garde GitFlow` | Groovy, Git | Valide branche/PR; déduit owner, environnement, version et sévérité. | Variables de build | Oui | 46–90 |
-| 2 | `Build Maven` | Maven, JDK 17 | Définit la version de branche et compile. | Classes compilées | Oui | 92–98 |
-| 3 | `Tests & couverture` | JUnit, Mockito, H2, JaCoCo | Lance les tests, construit le JAR testé et publie les rapports. | JAR + rapports tests/couverture | Oui | 100–114 |
-| 4 | `Sécurité du code` (sous-stages parallèles) | Gitleaks, Trivy FS | Scanne l'historique et analyse les dépendances/IaC. | Rapport Gitleaks masqué, `trivy-fs.txt` | Gitleaks oui; Trivy rapport | 115–140 |
-| 5 | `Analyse SonarQube` | SonarQube, JaCoCo | Analyse statique et couverture. | Résultat d'analyse | Oui | 141–155 |
-| 6 | `Quality Gate` | SonarQube, webhook | Attend le verdict Quality Gate. | Verdict | Oui | 156–164 |
-| 7 | `Publication JAR · Nexus` | Maven, Nexus | Publie le JAR validé, sauf PR. | Artefact Maven | Oui si déployé | 165–181 |
-| 8 | `Image Docker` | Docker, JRE 17 Alpine | Emballe le JAR testé dans une image non-root. | Image Docker taguée | Oui si déployé | 182–196 |
-| 9 | `Scan image · Trivy` | Trivy image | Scanne l'image avec `.trivyignore`; le mode strict bloque les CRITICAL corrigeables non acceptées. | Rapport Trivy | Rapport; strict sur `release/*`/`main` | 197–214 |
-| 10 | `Push image · Amazon ECR` | AWS CLI, IAM, ECR | Publie via le rôle IAM de l'EC2. | Image stockée dans ECR | Oui si déployé | 215–228 |
-| 11 | `Approbation production` | Jenkins `input` | Attend l'approbation avant promotion de `main`. | Approbation de release | Oui, `main` uniquement | 229–238 |
-| 12 | `Promotion GitOps` | Git, GitHub | Clone `gitops` profondeur 20; écrit la config, rebase et pousse au plus 5 fois. | Commit SHA de déploiement | Oui si déployé | 239–297 |
-| 13 | `Synchronisation Argo CD` | Argo CD CLI, Kubernetes | Attend le SHA dans `sync.revisions[]`, avec `Synced` et `Healthy`. | Confirmation du déploiement | Oui si déployé | 298–327 |
-| 14 | `Tests post-déploiement` (sous-stages parallèles) | curl, Actuator, OWASP ZAP | Vérifie readiness/Prometheus et analyse passivement l'application. | Résultat des sondes et rapport ZAP | Actuator oui; ZAP selon branche | 328–365 |
-| 15 | Notification de fin (bloc `post`) | Slack | Notifie le résultat du build. | Message `#igl5-g2-ci` | Non | 368–385 |
+| 1 | `Contexte & garde GitFlow` | Groovy, Git | Valide branche/PR; déduit owner, environnement, version et sévérité. Si déploiement : `ci/deploy-preflight.sh` vérifie paramètres, AWS/ECR, réseau/TLS/jeton Argo CD et la branche lue par Argo CD. | Variables de build | Oui | 46–99 |
+| 2 | `Build Maven` | Maven, JDK 17 | Définit la version de branche et compile. | Classes compilées | Oui | 102–108 |
+| 3 | `Tests & couverture` | JUnit, Mockito, H2, JaCoCo | Lance les tests, construit le JAR testé et publie les rapports. | JAR + rapports tests/couverture | Oui | 110–123 |
+| 4 | `Sécurité du code` (sous-stages parallèles) | Gitleaks, Trivy FS | Scanne l'historique et analyse les dépendances/IaC. | Rapport Gitleaks masqué, `trivy-fs.txt` | Gitleaks oui; Trivy rapport | 125–149 |
+| 5 | `Analyse SonarQube` | SonarQube, JaCoCo | Analyse statique et couverture. | Résultat d'analyse | Oui | 151–164 |
+| 6 | `Quality Gate` | SonarQube, webhook | Attend le verdict Quality Gate. | Verdict | Oui | 166–173 |
+| 7 | `Publication JAR · Nexus` | Maven, Nexus | Publie le JAR validé, sauf PR. | Artefact Maven | Oui si déployé | 175–190 |
+| 8 | `Image Docker` | Docker, JRE 17 Alpine | Emballe le JAR testé dans une image non-root. | Image Docker taguée | Oui si déployé | 192–205 |
+| 9 | `Scan image · Trivy` | Trivy image | Scanne l'image avec `.trivyignore`; le mode strict bloque les CRITICAL corrigeables non acceptées. | Rapport Trivy | Rapport; strict sur `release/*`/`main` | 207–223 |
+| 10 | `Push image · Amazon ECR` | AWS CLI, IAM, ECR | Publie via le rôle IAM de l'EC2. | Image stockée dans ECR | Oui si déployé | 225–237 |
+| 11 | `Approbation production` | Jenkins `input` | Attend l'approbation avant promotion de `main`. | Approbation de release | Oui, `main` uniquement | 239–247 |
+| 12 | `Promotion GitOps` | Git, GitHub | `ci/gitops-promote.sh` : écrit `envs/<env>/` sur `gitops`, sans commit vide, régénère et repousse en cas de push concurrent (5 essais), vérifie le SHA sur origin. | Commit SHA de déploiement | Oui si déployé | 249–261 |
+| 13 | `Synchronisation Argo CD` | Argo CD CLI, Kubernetes | `ci/argocd-wait.sh` : révision de la source `values` = SHA poussé (ou descendant sans changement de l env), image attendue, `Synced` + `Healthy`; erreurs CLI classées, jamais masquées. | Confirmation du déploiement | Oui si déployé | 263–276 |
+| 14 | `Tests post-déploiement` (sous-stages parallèles) | curl, Actuator, OWASP ZAP | `ci/smoke-tests.sh` : codes HTTP exacts sans suivre les redirections (readiness UP, Prometheus, `/events/`, API JSON) et ZAP passif. | Résultat des sondes et rapport ZAP | Actuator oui; ZAP selon branche | 278–297 |
+| 15 | Notification de fin (bloc `post`) | Slack | Notifie le résultat du build. | Message `#igl5-g2-ci` | Non | 300–317 |
 | 16 | Supervision continue (hors pipeline) | Prometheus, Alertmanager, Grafana | Scrape les métriques, alerte et affiche le dashboard. | Alertes et dashboards | Hors pipeline | `platform/gitops/platform/monitoring-config/` |
 
 Les chemins et lignes correspondent à ce dépôt unique; l'étape 0 est créée par `platform/ansible/roles/github_webhook/` et le job Multibranch est configuré dans `platform/ansible/roles/devops_stack/templates/jenkins-casc.yaml.j2`. Schéma du flux : [docs/pipeline-devops.png](docs/pipeline-devops.png).
