@@ -1,1 +1,9 @@
-{ "namespace": "events-participant", "profile": "review", "owner": "farah-baraket" }
+{
+  "namespace": "events-participant",
+  "profile": "review",
+  "owner": "farah-baraket",
+  "feature": "participant",
+  "imageRepository": "093574962208.dkr.ecr.us-east-1.amazonaws.com/events-app",
+  "imageTag": "participant-27-05777ca",
+  "host": "participant.events.local"
+}
