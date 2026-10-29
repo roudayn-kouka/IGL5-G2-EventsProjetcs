@@ -334,61 +334,135 @@ EOF
         }
 
         // ------------------------------------------------------------ 15
+        
         stage('Synchronisation Argo CD') {
             when { expression { env.DO_DEPLOY == 'true' } }
             steps {
-                withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
+                withCredentials([
+                    string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY'),
+                    string(credentialsId: 'aws-session-token', variable: 'AWS_SESSION_TOKEN')
+                ]) {
                     sh '''
-                      APP="events-$ENV_NAME"
-                      WANTED=$(cat gitops-revision.txt)
-                      for i in $(seq 1 60); do
-                        J=$(argocd app get "$APP" --refresh -o json 2>/dev/null || true)
-                        REV=$(echo "$J" | jq -r '(.status.sync.revisions // []) | join(",")')
-                        REV_MATCH=$(echo "$J" | jq -r --arg wanted "$WANTED" '(.status.sync.revisions // []) | index($wanted) != null')
-                        SYNC=$(echo "$J" | jq -r '.status.sync.status // empty')
-                        HEALTH=$(echo "$J" | jq -r '.status.health.status // empty')
-                        echo "[$i] $APP révisions=$REV commit-attendu=$REV_MATCH sync=$SYNC santé=$HEALTH"
-                        if [ "$REV_MATCH" = "true" ] && [ "$SYNC" = "Synced" ] && [ "$HEALTH" = "Healthy" ]; then
-                          echo "Déployé et sain."; exit 0
-                        fi
-                        if [ "$REV_MATCH" = "true" ] && [ "$HEALTH" = "Degraded" ]; then
-                          echo "Déploiement dégradé : voir l'interface Argo CD."; exit 1
-                        fi
-                        sleep 10
-                      done
-                      echo "Délai dépassé (10 min)."; exit 1
-                    '''
+        docker image inspect fst-eks-tools:local >/dev/null 2>&1 || \
+            docker build -t fst-eks-tools:local -f ci/Dockerfile.eks-tools .
+
+        docker run --rm -i --volumes-from jenkins -w "$WORKSPACE" \
+        -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+        -e AWS_SESSION_TOKEN -e AWS_REGION -e ENV_NAME \
+        fst-eks-tools:local sh -s <<'SCRIPT'
+        set -eu
+        export KUBECONFIG=/tmp/eks-kubeconfig
+        aws eks update-kubeconfig --region "$AWS_REGION" --name fst-events-eks
+
+        # Fail immediately if Jenkins cannot authenticate to EKS
+        kubectl get nodes >/dev/null
+        kubectl auth can-i get applications.argoproj.io -n argocd | grep -qx yes
+
+        APP="events-$ENV_NAME"
+        EXPECTED=$(cat gitops-revision.txt)
+
+        i=0
+        while [ "$i" -lt 60 ]; do
+            if kubectl get application "$APP" -n argocd -o json > /tmp/app.json 2>/dev/null; then
+                SYNC=$(jq -r '.status.sync.status // "Unknown"' /tmp/app.json)
+                HEALTH=$(jq -r '.status.health.status // "Unknown"' /tmp/app.json)
+                MATCH=$(jq -r --arg rev "$EXPECTED" \
+                '[.status.sync.revision, (.status.sync.revisions[]?)] | any(. == $rev)' /tmp/app.json)
+
+                echo "Argo CD: sync=$SYNC health=$HEALTH revisionMatch=$MATCH"
+
+                if [ "$SYNC" = Synced ] && [ "$HEALTH" = Healthy ] && [ "$MATCH" = true ]; then
+                    echo "GitOps deployment verified."
+                    exit 0
+                fi
+
+                if [ "$HEALTH" = Degraded ]; then
+                    echo "Argo CD reports a degraded application."
+                    exit 1
+                fi
+            fi
+
+            i=$((i + 1))
+            sleep 10
+        done
+
+        echo "Argo CD synchronization timed out."
+        exit 1
+        SCRIPT
+        '''
                 }
             }
         }
 
+
         // ------------------------------------------------------------ 16
+        
         stage('Smoke tests') {
             when { expression { env.DO_DEPLOY == 'true' } }
             steps {
-                sh '''
-                  BASE="http://$APP_HOST/events"
-                  HEALTH=$(curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "$BASE/actuator/health/readiness")
-                  echo "$HEALTH"
-                  echo "$HEALTH" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"' || {
-                    echo "Readiness Actuator n'est pas UP."; exit 1;
-                  }
-                  curl -fsS --retry 10 --retry-delay 6 --retry-all-errors -o /dev/null "$BASE/actuator/prometheus"
-                  echo "Endpoint Prometheus disponible."
+                withCredentials([
+                    string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY'),
+                    string(credentialsId: 'aws-session-token', variable: 'AWS_SESSION_TOKEN')
+                ]) {
+                    sh '''
+        docker run --rm -i --volumes-from jenkins -w "$WORKSPACE" \
+        -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+        -e AWS_SESSION_TOKEN -e AWS_REGION -e ENV_NAME \
+        -e K8S_NAMESPACE \
+        fst-eks-tools:local sh -s <<'SCRIPT'
+        set -eu
+        export KUBECONFIG=/tmp/eks-kubeconfig
+        aws eks update-kubeconfig --region "$AWS_REGION" --name fst-events-eks
 
-                  for endpoint in "$BASE/event-stats/summary" "$BASE/event/"; do
-                    STATUS=$(curl -sS -o /dev/null -w '%{http_code}' "$endpoint" || true)
-                    if [ "$STATUS" = "404" ]; then
-                      echo "AVERTISSEMENT : endpoint métier absent sur cette feature : $endpoint"
-                    elif [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
-                      echo "Endpoint métier disponible : $endpoint (HTTP $STATUS)"
-                    else
-                      echo "AVERTISSEMENT : endpoint métier $endpoint retourne HTTP $STATUS"
-                    fi
-                  done
-                '''
+        APP="events-$ENV_NAME"
+
+        kubectl rollout status deployment/"$APP" \
+        -n "$K8S_NAMESPACE" --timeout=180s
+
+        kubectl port-forward -n "$K8S_NAMESPACE" \
+        "svc/$APP" 18080:80 >/tmp/portforward.log 2>&1 &
+        PF_PID=$!
+        trap 'kill "$PF_PID" 2>/dev/null || true' EXIT
+
+        i=0
+        while [ "$i" -lt 30 ]; do
+            if curl -fsS --max-time 5 \
+            http://127.0.0.1:18080/events/actuator/health/readiness \
+            -o /tmp/health.json 2>/dev/null; then
+                if jq -e '.status == "UP"' /tmp/health.json >/dev/null; then
+                    echo "Readiness: UP"
+                    break
+                fi
+            fi
+
+            if ! kill -0 "$PF_PID" 2>/dev/null; then
+                cat /tmp/portforward.log
+                exit 1
+            fi
+
+            i=$((i + 1))
+            sleep 3
+        done
+
+        if [ "$i" -eq 30 ]; then
+            echo "Readiness check timed out."
+            cat /tmp/portforward.log
+            exit 1
+        fi
+
+        curl -fsS --max-time 15 -o /dev/null \
+        http://127.0.0.1:18080/events/actuator/prometheus
+
+        echo "Prometheus: HTTP 200"
+        echo "All smoke tests passed."
+        SCRIPT
+        '''
+                }
             }
         }
+
     }
 
     post {
