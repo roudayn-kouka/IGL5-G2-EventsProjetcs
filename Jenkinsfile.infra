@@ -41,7 +41,7 @@ def withTf(Closure body) {
 }
 
 def notify(String color, String text) {
-  try { slackSend(channel: '#igl5-g2-ci', color: color, message: text) }
+  try { slackSend(channel: '#igl5-g2-ci', color: color, message: "Farah Baraket : "+text) }
   catch (e) { echo "Slack non configuré : ${text}" }
 }
 
