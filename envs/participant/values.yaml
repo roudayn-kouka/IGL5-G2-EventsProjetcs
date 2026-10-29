@@ -1,8 +1,8 @@
-# Généré par Jenkins — build #25 — commit 25b0bdf — ne pas modifier à la main
+# Généré par Jenkins — build #26 — commit 3d57d3c — ne pas modifier à la main
 feature: participant
 owner: farah-baraket
 image:
   repository: 093574962208.dkr.ecr.us-east-1.amazonaws.com/events-app
-  tag: participant-25-25b0bdf
+  tag: participant-26-3d57d3c
 ingress:
   host: participant.events.local
