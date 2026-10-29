@@ -61,3 +61,5 @@ gitleaks-report.json
 # Secrets et sauvegardes locales Ansible
 platform/ansible/.vault_pass
 platform/ansible/roles/sonar_config/tasks/main.yml.bak
+# Copies chiffrées du Vault faites par platform/scripts/vault-set.sh
+platform/ansible/.vault-backups/

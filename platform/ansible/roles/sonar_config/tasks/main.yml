@@ -150,7 +150,47 @@
     sonar_config_jenkins_token_exists: >-
       {{ (sonar_config_tokens.json.userTokens | selectattr('name', 'equalto', 'jenkins') | list | length) > 0 }}
 
-- name: Générer le jeton d'analyse Jenkins une seule fois
+# Nouveau jeton si le Vault n'en a pas, ou si SonarQube ne connaît plus le jeton « jenkins ».
+# Un jeton existant mais absent du Vault est orphelin (valeur illisible, inutilisée par Jenkins) :
+# il est révoqué puis remplacé. Le jeton va directement dans le Vault, sans jamais être affiché.
+- name: Déterminer si un nouveau jeton Jenkins est nécessaire
+  ansible.builtin.set_fact:
+    sonar_config_new_token: "{{ (sonar_token | length == 0) or not (sonar_config_jenkins_token_exists | bool) }}"
+
+- name: Fichier de mot de passe Vault sur le contrôleur (enregistrement du jeton)
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/.vault_pass"
+  delegate_to: localhost
+  become: false
+  register: sonar_config_vault_pass
+  when: sonar_config_new_token | bool
+
+- name: Refuser de générer un jeton qui ne pourrait pas être enregistré
+  ansible.builtin.fail:
+    msg: >-
+      Un jeton SonarQube doit être créé, mais {{ playbook_dir }}/.vault_pass est absent :
+      sans lui, le jeton (affichable une seule fois) serait perdu. Créer ce fichier (0600) et relancer.
+  when:
+    - sonar_config_new_token | bool
+    - not sonar_config_vault_pass.stat.exists
+
+- name: Révoquer le jeton jenkins orphelin (absent du Vault)
+  ansible.builtin.uri:
+    url: "{{ sonarqube_api_url }}/api/user_tokens/revoke"
+    method: POST
+    url_username: admin
+    url_password: "{{ sonar_admin_password }}"
+    force_basic_auth: true
+    body_format: form-urlencoded
+    body:
+      name: jenkins
+    status_code: 204
+  when:
+    - sonar_config_new_token | bool
+    - sonar_config_jenkins_token_exists | bool
+  no_log: true
+
+- name: Générer le jeton d'analyse Jenkins
   ansible.builtin.uri:
     url: "{{ sonarqube_api_url }}/api/user_tokens/generate"
     method: POST
@@ -163,21 +203,38 @@
     return_content: true
     status_code: 200
   register: sonar_config_generated_token
-  when: not (sonar_config_jenkins_token_exists | bool)
+  when: sonar_config_new_token | bool
   no_log: true
 
-- name: Afficher le jeton Jenkins nouvellement créé (à enregistrer immédiatement dans le Vault)
-  ansible.builtin.debug:
-    msg: "Jeton SonarQube Jenkins (affiché une seule fois) : {{ sonar_config_generated_token.json.token }}"
-  when:
-    - not (sonar_config_jenkins_token_exists | bool)
-    - sonar_config_generated_token is not skipped
+- name: Enregistrer le jeton dans vault_sonar_token (contrôleur, valeur non affichée)
+  ansible.builtin.command:
+    cmd: bash {{ playbook_dir }}/../scripts/vault-set.sh vault_sonar_token
+    stdin: "{{ sonar_config_generated_token.json.token }}"
+  delegate_to: localhost
+  become: false
+  changed_when: true
+  when: sonar_config_new_token | bool
+  no_log: true
 
-- name: Signaler qu'un jeton existant ne peut pas être relu
-  ansible.builtin.debug:
-    msg: >-
-      Le jeton SonarQube nommé jenkins existe déjà et sa valeur n'est plus récupérable.
-      S'il manque dans vault_sonar_token, révoquez-le dans SonarQube et relancez ce rôle.
-  when:
-    - sonar_config_jenkins_token_exists | bool
-    - sonar_token | length == 0
+- name: Utiliser le nouveau jeton pour la suite du playbook
+  ansible.builtin.set_fact:
+    sonar_token: "{{ sonar_config_generated_token.json.token }}"
+  when: sonar_config_new_token | bool
+  no_log: true
+
+# devops_stack a déjà écrit .env : on le réécrit avec le jeton, puis Compose recrée Jenkins
+# (environnement modifié) et JCasC recharge le credential sonar-token.
+- name: Transmettre le jeton à Jenkins (.env de la stack)
+  ansible.builtin.template:
+    src: "{{ role_path }}/../devops_stack/templates/env.j2"
+    dest: "{{ stack_dir }}/.env"
+    mode: "0600"
+  when: sonar_config_new_token | bool
+  no_log: true
+
+- name: Recréer Jenkins avec le nouveau credential sonar-token
+  community.docker.docker_compose_v2:
+    project_src: "{{ stack_dir }}"
+    services: [jenkins]
+    state: present
+  when: sonar_config_new_token | bool

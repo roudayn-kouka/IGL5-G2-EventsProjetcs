@@ -8,7 +8,7 @@ AWS_REGION := $(or $(AWS_DEFAULT_REGION),$(shell aws configure get region 2>/dev
 endif
 export AWS_REGION
 
-.PHONY: help bootstrap-state init plan apply kubeconfig configure post-apply argocd-ui argocd-token grafana-ui status destroy
+.PHONY: help bootstrap-state init plan apply kubeconfig configure post-apply argocd-ui argocd-login argocd-token grafana-ui status destroy
 
 help:
 	@echo "Région AWS : $(AWS_REGION)"
@@ -44,13 +44,22 @@ post-apply: ## Découvre les adresses des NLB, met à jour runtime.yml et commit
 	@echo "Découverte des NLB, mise à jour du runtime Ansible et commit local des hôtes sur gitops."
 	@bash scripts/post-apply.sh
 
-argocd-ui: ## Ouvre l'interface Argo CD en port-forward sur localhost:8080
-	@echo "Port-forward local vers l'API Argo CD (Ctrl+C pour arrêter)."
-	@kubectl -n argocd port-forward svc/argocd-server 8080:80
+# Argo CD sert du HTTP en clair (server.insecure : NLB interne au VPC). Toute connexion TLS
+# (https://, CLI sans --plaintext) est refusée et kubectl arrête alors le tunnel entier
+# (« lost connection to pod ») : la boucle le relance, Ctrl+C arrête tout.
+argocd-ui: ## Port-forward Argo CD en HTTP sur localhost port 8080 (relancé s'il est coupé)
+	@echo "Argo CD : http://localhost:8080 (HTTP, pas https). CLI : --plaintext --grpc-web. Ctrl+C pour arrêter."
+	@trap 'exit 130' INT TERM; while true; do \
+	  kubectl -n argocd port-forward --address 127.0.0.1 svc/argocd-server 8080:80 || true; \
+	  echo "Tunnel interrompu (connexion TLS refusée ou API indisponible) : relance dans 2 s."; sleep 2; \
+	done
 
-argocd-token: ## Affiche la commande pour générer le jeton du compte Jenkins
-	@echo "Après connexion administrateur à Argo CD, générez un jeton pour l'étape 13 :"
-	@echo "argocd account generate-token --account jenkins --server localhost:8080 --grpc-web --plaintext"
+argocd-login: ## Connexion admin au CLI Argo CD via le port-forward (mot de passe masqué)
+	@argocd login localhost:8080 --plaintext --grpc-web --username admin
+	@argocd account get-user-info --server localhost:8080 --plaintext --grpc-web
+
+argocd-token: ## Génère le jeton du compte jenkins et l'enregistre dans le Vault (jamais affiché)
+	@bash scripts/argocd-jenkins-token.sh
 
 grafana-ui: ## Ouvre Grafana en port-forward sur localhost:3000
 	@echo "Port-forward local vers Grafana (Ctrl+C pour arrêter)."
