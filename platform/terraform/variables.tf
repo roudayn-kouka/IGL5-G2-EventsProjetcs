@@ -7,7 +7,7 @@ variable "project" {
 variable "region" {
   description = "Région AWS (Paris)"
   type        = string
-  default     = "eu-west-3"
+  default     = "us-east-1"
 }
 
 variable "cluster_version" {
