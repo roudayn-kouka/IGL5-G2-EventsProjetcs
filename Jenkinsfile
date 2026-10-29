@@ -123,21 +123,14 @@ pipeline {
                 '''
             }
         }
-        stage('Scan image · Trivy') {
-            when { expression { env.DEPLOY == 'true' } }
+        stage('Dépendances & IaC · Trivy FS') {
             steps {
-                script {
-                    def exitCode = (env.SECURITY_GATE == 'strict') ? '1' : '0'
-                    sh """
-                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-                        --volumes-from jenkins -v trivy-cache:/root/.cache ${TRIVY_IMAGE} image \
-                        --skip-db-update --skip-java-db-update \
-                        --severity CRITICAL --ignore-unfixed --exit-code ${exitCode} \
-                        --ignorefile "\$WORKSPACE/.trivyignore" \
-                        --format table --output "\$WORKSPACE/trivy-image.txt" ${IMAGE}
-                    """
-                    sh 'cat trivy-image.txt'
-                }
+                sh '''
+                docker run --rm --volumes-from jenkins -v trivy-cache:/root/.cache $TRIVY_IMAGE fs \
+                    --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 0 \
+                    --format table --output "$WORKSPACE/trivy-fs.txt" "$WORKSPACE"
+                cat trivy-fs.txt
+                '''
             }
         }
             }
@@ -206,11 +199,12 @@ pipeline {
                 script {
                     def exitCode = (env.SECURITY_GATE == 'strict') ? '1' : '0'
                     sh """
-                      docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-                        -v "\$WORKSPACE:/reports" -v trivy-cache:/root/.cache ${TRIVY_IMAGE} image \
+                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                        --volumes-from jenkins -v trivy-cache:/root/.cache ${TRIVY_IMAGE} image \
+                        --skip-db-update --skip-java-db-update \
                         --severity CRITICAL --ignore-unfixed --exit-code ${exitCode} \
-                        --ignorefile /reports/.trivyignore \
-                        --format table --output /reports/trivy-image.txt ${IMAGE}
+                        --ignorefile "\$WORKSPACE/.trivyignore" \
+                        --format table --output "\$WORKSPACE/trivy-image.txt" ${IMAGE}
                     """
                     sh 'cat trivy-image.txt'
                 }
