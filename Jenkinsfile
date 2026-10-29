@@ -302,7 +302,7 @@ EOF
 feature: $FEATURE_SLUG
 owner: $OWNER_SLUG
 image:
-  repository: $ECR_REGISTRY/$APP_NAME
+  repository: $DOCKERHUB_REPO
   tag: $IMAGE_TAG
 ingress:
   host: $APP_HOST
