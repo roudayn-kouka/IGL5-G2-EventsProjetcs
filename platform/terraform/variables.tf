@@ -74,3 +74,22 @@ variable "lab_role_arn" {
   type        = string
   default     = ""
 }
+
+# --- Mode « Jenkins sur un PC » (Learner Lab) : les valeurs par défaut gardent le comportement d'équipe ---
+variable "create_devops_ec2" {
+  description = "false = pas d'EC2 « usine DevOps » (Jenkins, Nexus, SonarQube tournent ailleurs, ex. Docker sur un PC)"
+  type        = bool
+  default     = true
+}
+
+variable "argocd_public" {
+  description = "true = le NLB d'Argo CD est public, restreint à admin_cidr (Jenkins hors du VPC) ; false = NLB interne au VPC"
+  type        = bool
+  default     = false
+}
+
+variable "appset_only_env" {
+  description = "Vide = tous les dossiers envs/ de la branche gitops. Sinon un seul environnement (ex. participant) : l'ApplicationSet n'est pas géré par l'application racine, Jenkins l'applique filtré."
+  type        = string
+  default     = ""
+}

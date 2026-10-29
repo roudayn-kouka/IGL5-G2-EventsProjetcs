@@ -1,26 +1,30 @@
 // =============================================================================
-//  Events Project · FST · IGL5 G2 — Pipeline CI/CD/DevSecOps (GitOps)
+//  Events Project · FST · IGL5 G2 — Pipeline CI/CD/DevSecOps (GitOps) — version AWS Learner Lab
 //
-//  UN SEUL Jenkinsfile pour TOUTES les branches (job Jenkins « Multibranch Pipeline »).
-//  Répartition des rôles :
-//    Jenkins  = intégration continue + sécurité + publication + PROMOTION GitOps
-//    Argo CD  = déploiement (modèle « pull ») : il lit le dépôt plateforme et applique sur EKS
-//  => Jenkins n'a AUCUN accès au cluster Kubernetes.
+//  Job Jenkins « Multibranch Pipeline », MAIS le pipeline ne s'exécute QUE sur feature/participant :
+//    1. le job filtre les branches (Behaviours > Filter by name : feature/participant)
+//    2. ceinture + bretelles : le stage racine ci-dessous a « when { branch 'feature/participant' } »
 //
-//  Contexte déduit du nom de branche (GitFlow) :
-//    feature/<nom>  -> environnement éphémère  events-<nom>
-//    develop        -> events-staging
-//    release/x.y.z  -> events-staging (gate sécurité strict)
-//    main           -> events-prod    (gate strict + APPROBATION manuelle)
-//    PR-*           -> intégration continue seulement
+//  Différences avec la version d'équipe (EC2 + rôle IAM) :
+//    - pas de rôle IAM sur EC2 : les 3 clés du Learner Lab sont lues dans Jenkins (aws_access_key_id,
+//      aws_secret_access_key, aws_session_token) ; elles expirent => à recopier à chaque session
+//    - le n° de compte est lu à l'exécution (aws sts) ; le dépôt ECR events-app est créé par Terraform (Jenkinsfile.infra)
+//    - Jenkins tourne sur ton PC : il atteint Argo CD par la CLI argocd (serveur exposé par Jenkinsfile.infra,
+//      adresse + token écrits dans /var/jenkins_home/argocd/) et l'ingress par kubectl (aws eks update-kubeconfig)
+//    - les variables Ansible/CasC (NEXUS_URL, PLATFORM_REPO...) sont définies ici, dans environment{}
+//    - gitleaks et trivy sont les binaires installés dans le conteneur Jenkins (un « docker run -v $WORKSPACE »
+//      depuis un Jenkins en conteneur monterait un dossier de l'hôte, pas celui du workspace)
+//    - pas d'approbation production : la branche main n'est pas construite
 //
-//  Variables globales (injectées par Ansible via Jenkins Configuration as Code) :
-//    NEXUS_URL, ECR_REGISTRY, AWS_REGION, PLATFORM_REPO, GITOPS_BRANCH, ARGOCD_SERVER, APPS_DOMAIN
-//  Credentials : nexus-credentials, github-credentials, argocd-token, sonar-token (serveur « sonarqube »)
+//  Credentials Jenkins : aws_access_key_id, aws_secret_access_key, aws_session_token (Secret text),
+//                        nexus-credentials, github-credentials (Username + token), sonar-token (serveur « sonarqube »)
+//  Prérequis cluster : Jenkinsfile.infra (apply) a déjà créé EKS, ingress-nginx, Argo CD et l'ApplicationSet.
 // =============================================================================
 
 pipeline {
     agent any
+
+    tools { jdk 'jdk17' }                       // nom de l'outil JDK 17 dans Manage Jenkins > Tools
 
     options {
         timestamps()
@@ -31,333 +35,310 @@ pipeline {
     }
 
     environment {
-        APP_NAME     = 'events-app'
-        TRIVY_IMAGE  = 'aquasec/trivy:0.56.2'
-        GITLEAKS_IMG = 'zricethezav/gitleaks:v8.21.2'
-        ZAP_IMAGE    = 'ghcr.io/zaproxy/zaproxy:stable'
-        SONAR_PLUGIN = 'org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922'
-        MVN          = 'mvn -B -ntp'
-        ARGOCD_OPTS  = '--grpc-web --plaintext'
+        APP_NAME           = 'events-app'
+        AWS_REGION         = 'us-east-1'
+        AWS_DEFAULT_REGION = 'us-east-1'
+        CLUSTER            = 'fst-events'                    // = cluster_name dans terraform/aws/variables.tf
+        KUBECONFIG         = "${WORKSPACE}/.kubeconfig"
+        NEXUS_URL          = 'http://nexus:8081'             // nom du conteneur sur le réseau ci-net
+        PLATFORM_REPO      = 'roudayn-kouka/IGL5-G2-EventsProjetcs'   // le dépôt plateforme est le même que celui de l'application
+        GITOPS_BRANCH      = 'gitops'                        // branche écrite par Jenkins (envs/<env>/values.yaml)
+        APPS_DOMAIN        = 'events.local'                  // nom d'hôte de l'ingress (résolu par curl --resolve)
+        ARGOCD_OPTS        = '--grpc-web --plaintext'         // le serveur Argo CD de l'équipe est en HTTP (server.insecure)
+        ARGOCD_DIR         = '/var/jenkins_home/argocd'       // server + token, écrits par Jenkinsfile.infra
+        ZAP_IMAGE          = 'ghcr.io/zaproxy/zaproxy:stable'
+        SONAR_PLUGIN       = 'org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922'
+        MVN                = 'sh ./mvnw -B -ntp'             // wrapper du dépôt : pas besoin de Maven dans Jenkins
     }
 
     stages {
 
-        // ------------------------------------------------------------ 1
-        stage('Contexte & garde GitFlow') {
-            steps {
-                script {
-                    def branch = env.CHANGE_BRANCH ?: env.BRANCH_NAME
-                    if (!(branch ==~ /^(main|develop|feature\/[a-z0-9-]+|release\/\d+\.\d+(\.\d+)?|hotfix\/[a-z0-9.-]+)$/)) {
-                        error "Nom de branche '${branch}' hors convention GitFlow (feature/<nom-en-minuscules>, release/x.y.z, hotfix/...)"
-                    }
-                    if (env.CHANGE_ID && branch.startsWith('feature/') && env.CHANGE_TARGET != 'develop') {
-                        error "GitFlow : une feature se fusionne dans develop, pas dans ${env.CHANGE_TARGET}"
-                    }
+        stage('Pipeline feature/participant') {
+            when { branch 'feature/participant' }
+            stages {
 
-                    env.BRANCH_TYPE   = env.CHANGE_ID ? 'pr' : branchType(branch)
-                    env.FEATURE_SLUG  = featureSlug(branch)
-                    env.OWNER         = ownerOf(branch)
-                    env.OWNER_SLUG    = slugify(env.OWNER)
-                    env.GIT_SHORT     = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
-                    env.K8S_NAMESPACE = namespaceFor(env.BRANCH_TYPE, env.FEATURE_SLUG)
-                    env.ENV_NAME      = env.K8S_NAMESPACE.replaceFirst(/^events-/, '')
-                    env.HELM_PROFILE  = profileFor(env.BRANCH_TYPE)
-                    env.DEPLOY        = (env.BRANCH_TYPE == 'pr') ? 'false' : 'true'
-                    env.SECURITY_GATE = (env.BRANCH_TYPE in ['main', 'release']) ? 'strict' : 'report'
-                    env.APP_VERSION   = (env.BRANCH_TYPE == 'main') ? "1.0.${env.BUILD_NUMBER}" : "1.0.0-${env.FEATURE_SLUG}-SNAPSHOT"
-                    env.IMAGE_TAG     = "${env.FEATURE_SLUG}-${env.BUILD_NUMBER}-${env.GIT_SHORT}"
-                    env.IMAGE         = "${env.ECR_REGISTRY ?: 'registry.local'}/${env.APP_NAME}:${env.IMAGE_TAG}"
-                    env.SONAR_KEY     = "fst-events-${env.FEATURE_SLUG}"
-                    env.APP_HOST      = "${env.ENV_NAME}.${env.APPS_DOMAIN ?: 'apps.local'}"
-
-                    currentBuild.displayName = "#${env.BUILD_NUMBER} · ${env.FEATURE_SLUG}"
-                    currentBuild.description = "${env.OWNER} · ${env.GIT_SHORT} · ${env.K8S_NAMESPACE}"
-
-                    echo """
-                    ┌──────────────────────── Contexte ────────────────────────
-                    │ Branche        : ${branch}  (${env.BRANCH_TYPE})
-                    │ Responsable    : ${env.OWNER}
-                    │ Version Maven  : ${env.APP_VERSION}
-                    │ Image          : ${env.IMAGE}
-                    │ Projet Sonar   : ${env.SONAR_KEY}
-                    │ Environnement  : ${env.K8S_NAMESPACE}  (profil ${env.HELM_PROFILE})
-                    │ URL            : http://${env.APP_HOST}/events/
-                    │ Gate sécurité  : ${env.SECURITY_GATE}
-                    └──────────────────────────────────────────────────────────"""
-                }
-            }
-        }
-
-        // ------------------------------------------------------------ 2
-        stage('Build Maven') {
-            steps {
-                sh "${MVN} versions:set -DnewVersion=${APP_VERSION} -DgenerateBackupPoms=false"
-                sh "${MVN} clean compile"
-            }
-        }
-
-        // ------------------------------------------------------------ 3
-        stage('Tests & couverture') {
-            steps {
-                // Tests avec Mockito + tests d'intégration (H2) + rapport JaCoCo + JAR exécutable
-                sh "${MVN} verify"
-            }
-            post {
-                always {
-                    junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
-                    recordCoverage(tools: [[parser: 'JACOCO', pattern: 'target/site/jacoco/jacoco.xml']],
-                                   id: 'jacoco', name: 'Couverture JaCoCo')
-                }
-            }
-        }
-
-        // ------------------------------------------------------------ 4
-        stage('Sécurité du code') {
-            parallel {
-                stage('Secrets · Gitleaks') {
-                    steps {
-                        // Bloquant partout : un secret commité n'est jamais acceptable
-                        sh '''
-                          docker run --rm -v "$WORKSPACE:/repo" $GITLEAKS_IMG detect \
-                            --source /repo --redact --no-banner \
-                            --report-format json --report-path /repo/gitleaks-report.json
-                        '''
-                    }
-                }
-                stage('Dépendances & IaC · Trivy FS') {
-                    steps {
-                        sh '''
-                          docker run --rm -v "$WORKSPACE:/src" -v trivy-cache:/root/.cache $TRIVY_IMAGE fs \
-                            --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 0 \
-                            --format table --output /src/trivy-fs.txt /src
-                          cat trivy-fs.txt
-                        '''
-                    }
-                }
-            }
-        }
-
-        // ------------------------------------------------------------ 5
-        stage('Analyse SonarQube') {
-            steps {
-                withSonarQubeEnv('sonarqube') {
-                    sh """
-                      ${MVN} ${SONAR_PLUGIN}:sonar \
-                        -Dsonar.projectKey=${SONAR_KEY} \
-                        -Dsonar.projectName='Events · ${FEATURE_SLUG}' \
-                        -Dsonar.projectVersion=${APP_VERSION} \
-                        -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
-                    """
-                }
-            }
-        }
-
-        // ------------------------------------------------------------ 6
-        stage('Quality Gate') {
-            steps {
-                timeout(time: 10, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
-        }
-
-        // ------------------------------------------------------------ 7
-        stage('Publication JAR · Nexus') {
-            when { expression { env.DEPLOY == 'true' } }
-            steps {
-                script {
-                    def repo = env.APP_VERSION.endsWith('-SNAPSHOT') ? 'maven-snapshots' : 'maven-releases'
-                    withCredentials([usernamePassword(credentialsId: 'nexus-credentials',
-                                                      usernameVariable: 'NEXUS_USR', passwordVariable: 'NEXUS_PSW')]) {
-                        sh """
-                          ${MVN} -s ci/maven-settings.xml deploy -DskipTests \
-                            -DaltDeploymentRepository=nexus::default::${env.NEXUS_URL}/repository/${repo}/
-                        """
-                    }
-                }
-            }
-        }
-
-        // ------------------------------------------------------------ 8
-        stage('Image Docker') {
-            when { expression { env.DEPLOY == 'true' } }
-            steps {
-                sh '''
-                  docker build --pull \
-                    --label org.opencontainers.image.revision=$GIT_SHORT \
-                    --label org.opencontainers.image.version=$APP_VERSION \
-                    --label tn.fst.feature=$FEATURE_SLUG \
-                    --label tn.fst.owner=$OWNER_SLUG \
-                    -t $IMAGE .
-                '''
-            }
-        }
-
-        // ------------------------------------------------------------ 9
-        stage('Scan image · Trivy') {
-            when { expression { env.DEPLOY == 'true' } }
-            steps {
-                script {
-                    def exitCode = (env.SECURITY_GATE == 'strict') ? '1' : '0'
-                    sh """
-                      docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-                        -v "\$WORKSPACE:/reports" -v trivy-cache:/root/.cache ${TRIVY_IMAGE} image \
-                        --severity CRITICAL --ignore-unfixed --exit-code ${exitCode} \
-                        --ignorefile /reports/.trivyignore \
-                        --format table --output /reports/trivy-image.txt ${IMAGE}
-                    """
-                    sh 'cat trivy-image.txt'
-                }
-            }
-        }
-
-        // ------------------------------------------------------------ 10
-        stage('Push image · Amazon ECR') {
-            when { expression { env.DEPLOY == 'true' } }
-            steps {
-                // Authentification par le rôle IAM de l'EC2 : aucune clé AWS dans Jenkins
-                sh '''
-                  aws ecr get-login-password --region "$AWS_REGION" \
-                    | docker login --username AWS --password-stdin "$ECR_REGISTRY"
-                  docker push "$IMAGE"
-                  docker logout "$ECR_REGISTRY"
-                '''
-            }
-        }
-
-        // ------------------------------------------------------------ 11
-        stage('Approbation production') {
-            when { expression { env.BRANCH_TYPE == 'main' } }
-            steps {
-                timeout(time: 24, unit: 'HOURS') {
-                    input message: "Promouvoir ${env.IMAGE_TAG} en PRODUCTION ?", ok: 'Promouvoir'
-                }
-            }
-        }
-
-        // ------------------------------------------------------------ 12
-        stage('Promotion GitOps') {
-            when { expression { env.DEPLOY == 'true' } }
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'github-credentials',
-                                                  usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
-                    // Jenkins ne déploie pas : il décrit l'état voulu sur la branche gitops.
-                    // L'ApplicationSet Argo CD crée automatiquement l'environnement s'il est nouveau.
-                    sh '''
-                      rm -rf gitops-work
-                      AUTH_HEADER="AUTHORIZATION: basic $(printf '%s' "$GIT_USER:$GIT_TOKEN" | base64 | tr -d '\n')"
-                      git -c http.extraheader="$AUTH_HEADER" \
-                        clone --branch "$GITOPS_BRANCH" --depth 20 "https://github.com/$PLATFORM_REPO.git" gitops-work
-                      trap 'cd "$WORKSPACE"; rm -rf gitops-work' EXIT
-                      git -C gitops-work config http.extraheader "$AUTH_HEADER"
-                      unset AUTH_HEADER
-                      ENV_DIR="gitops-work/envs/$ENV_NAME"
-                      mkdir -p "$ENV_DIR"
-
-                      cat > "$ENV_DIR/config.json" <<EOF
-{ "namespace": "$K8S_NAMESPACE", "profile": "$HELM_PROFILE", "owner": "$OWNER_SLUG" }
-EOF
-                      cat > "$ENV_DIR/values.yaml" <<EOF
-# Généré par Jenkins — build #$BUILD_NUMBER — commit $GIT_SHORT — ne pas modifier à la main
-feature: $FEATURE_SLUG
-owner: $OWNER_SLUG
-image:
-  repository: $ECR_REGISTRY/$APP_NAME
-  tag: $IMAGE_TAG
-ingress:
-  host: $APP_HOST
-EOF
-                      cd gitops-work
-                      git config user.name  "Jenkins FST"
-                      git config user.email "jenkins@fst-events.local"
-                      git add "envs/$ENV_NAME"
-                      git diff --cached --quiet || git commit -m "deploy($ENV_NAME): $IMAGE_TAG [build #$BUILD_NUMBER · $OWNER]"
-
-                      # Plusieurs membres peuvent promouvoir en même temps : rebase puis nouvel essai
-                      PUSHED=false
-                      for i in 1 2 3 4 5; do
-                        if git push origin "HEAD:$GITOPS_BRANCH"; then
-                          PUSHED=true
-                          break
-                        fi
-                        if [ "$i" -lt 5 ]; then
-                          git pull --rebase origin "$GITOPS_BRANCH"
-                        fi
-                      done
-                      if [ "$PUSHED" != true ]; then
-                        echo "Échec du push GitOps après cinq tentatives."
-                        exit 1
-                      fi
-                      git rev-parse HEAD > ../gitops-revision.txt
-                    '''
-                }
-            }
-        }
-
-        // ------------------------------------------------------------ 13
-        stage('Synchronisation Argo CD') {
-            when { expression { env.DEPLOY == 'true' } }
-            steps {
-                withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
-                    // On attend qu'Argo CD ait appliqué EXACTEMENT notre révision et que l'appli soit saine
-                    sh '''
-                      APP="events-$ENV_NAME"
-                      WANTED=$(cat gitops-revision.txt)
-                      for i in $(seq 1 60); do
-                        J=$(argocd app get "$APP" --refresh -o json 2>/dev/null || true)
-                        REV=$(echo "$J" | jq -r '(.status.sync.revisions // []) | join(",")')
-                        REV_MATCH=$(echo "$J" | jq -r --arg wanted "$WANTED" '(.status.sync.revisions // []) | index($wanted) != null')
-                        SYNC=$(echo "$J" | jq -r '.status.sync.status // empty')
-                        HEALTH=$(echo "$J" | jq -r '.status.health.status // empty')
-                        echo "[$i] $APP révisions=$REV commit-attendu=$REV_MATCH sync=$SYNC santé=$HEALTH"
-                        if [ "$REV_MATCH" = "true" ] && [ "$SYNC" = "Synced" ] && [ "$HEALTH" = "Healthy" ]; then
-                          echo "Déployé et sain."; exit 0
-                        fi
-                        if [ "$REV_MATCH" = "true" ] && [ "$HEALTH" = "Degraded" ]; then
-                          echo "Déploiement dégradé : voir l'interface Argo CD."; exit 1
-                        fi
-                        sleep 10
-                      done
-                      echo "Délai dépassé (10 min)."; exit 1
-                    '''
-                }
-            }
-        }
-
-        // ------------------------------------------------------------ 14
-        stage('Tests post-déploiement') {
-            when { expression { env.DEPLOY == 'true' } }
-            parallel {
-                stage('Smoke tests') {
-                    steps {
-                        sh '''
-                          BASE="http://$APP_HOST/events"
-                          HEALTH=$(curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "$BASE/actuator/health/readiness")
-                          echo "$HEALTH"
-                          echo "$HEALTH" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"' || {
-                            echo "Readiness Actuator n'est pas UP."; exit 1;
-                          }
-                          curl -fsS --retry 10 --retry-delay 6 --retry-all-errors -o /dev/null "$BASE/actuator/prometheus"
-                          echo "Endpoint Prometheus disponible."
-
-                          for endpoint in "$BASE/event-stats/summary" "$BASE/event/"; do
-                            STATUS=$(curl -sS -o /dev/null -w '%{http_code}' "$endpoint" || true)
-                            if [ "$STATUS" = "404" ]; then
-                              echo "AVERTISSEMENT : endpoint métier absent sur cette feature : $endpoint"
-                            elif [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
-                              echo "Endpoint métier disponible : $endpoint (HTTP $STATUS)"
-                            else
-                              echo "AVERTISSEMENT : endpoint métier $endpoint retourne HTTP $STATUS"
-                            fi
-                          done
-                        '''
-                    }
-                }
-                stage('DAST · OWASP ZAP') {
+                // ------------------------------------------------------------ 1
+                stage('Contexte') {
                     steps {
                         script {
-                            def tolerate = (env.SECURITY_GATE == 'strict') ? '' : ' || true'
-                            sh "docker run --rm ${ZAP_IMAGE} zap-baseline.py -t http://${env.APP_HOST}/events/ -I -m 2${tolerate}"
+                            def branch = env.BRANCH_NAME
+                            env.BRANCH_TYPE   = 'feature'
+                            env.FEATURE_SLUG  = featureSlug(branch)
+                            env.OWNER         = ownerOf(branch)
+                            env.OWNER_SLUG    = slugify(env.OWNER)
+                            env.GIT_SHORT     = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+                            env.K8S_NAMESPACE = "events-${env.FEATURE_SLUG}"
+                            env.ENV_NAME      = env.FEATURE_SLUG
+                            env.HELM_PROFILE  = 'review'
+                            env.SECURITY_GATE = 'report'
+                            env.APP_VERSION   = "1.0.0-${env.FEATURE_SLUG}-SNAPSHOT"
+                            env.IMAGE_TAG     = "${env.FEATURE_SLUG}-${env.BUILD_NUMBER}-${env.GIT_SHORT}"
+                            env.SONAR_KEY     = "fst-events-${env.FEATURE_SLUG}"
+                            env.APP_HOST      = "${env.ENV_NAME}.${env.APPS_DOMAIN}"
+
+                            currentBuild.displayName = "#${env.BUILD_NUMBER} · ${env.FEATURE_SLUG}"
+                            currentBuild.description = "${env.OWNER} · ${env.GIT_SHORT} · ${env.K8S_NAMESPACE}"
+                            echo "Branche ${branch} · responsable ${env.OWNER} · namespace ${env.K8S_NAMESPACE} · version ${env.APP_VERSION}"
+                        }
+                    }
+                }
+
+                // ------------------------------------------------------------ 2  (échoue tout de suite si les clés Learner Lab ont expiré)
+                stage('AWS Learner Lab') {
+                    steps {
+                        script {
+                            try {
+                                withAws {
+                                    env.AWS_ACCOUNT = sh(script: 'aws sts get-caller-identity --query Account --output text', returnStdout: true).trim()
+                                    sh 'aws ecr describe-repositories --repository-names "$APP_NAME" >/dev/null'
+                                }
+                            } catch (e) {
+                                error "AWS refuse les clés, ou le dépôt ECR ${env.APP_NAME} n'existe pas : recopie les 3 clés Learner Lab dans Jenkins, ou lance Jenkinsfile.infra (ACTION=apply)."
+                            }
+                            env.ECR_REGISTRY = "${env.AWS_ACCOUNT}.dkr.ecr.${env.AWS_REGION}.amazonaws.com"
+                            env.IMAGE        = "${env.ECR_REGISTRY}/${env.APP_NAME}:${env.IMAGE_TAG}"
+                            echo "Registre ECR : ${env.ECR_REGISTRY} · image : ${env.IMAGE}"
+                        }
+                    }
+                }
+
+                // ------------------------------------------------------------ 3
+                stage('Build Maven') {
+                    steps {
+                        sh "${MVN} versions:set -DnewVersion=${APP_VERSION} -DgenerateBackupPoms=false"
+                        sh "${MVN} clean compile"
+                    }
+                }
+
+                // ------------------------------------------------------------ 4
+                stage('Tests & couverture') {
+                    steps {
+                        sh "${MVN} verify"
+                    }
+                    post {
+                        always {
+                            junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
+                            recordCoverage(tools: [[parser: 'JACOCO', pattern: 'target/site/jacoco/jacoco.xml']],
+                                           id: 'jacoco', name: 'Couverture JaCoCo')
+                        }
+                    }
+                }
+
+                // ------------------------------------------------------------ 5
+                stage('Sécurité du code') {
+                    parallel {
+                        stage('Secrets · Gitleaks') {
+                            steps {
+                                // Bloquant : un secret commité n'est jamais acceptable
+                                sh 'gitleaks detect --source . --redact --no-banner --report-format json --report-path gitleaks-report.json'
+                            }
+                        }
+                        stage('Dépendances & IaC · Trivy FS') {
+                            steps {
+                                sh '''
+                                  trivy fs --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 0 \
+                                    --format table --output trivy-fs.txt .
+                                  cat trivy-fs.txt
+                                '''
+                            }
+                        }
+                    }
+                }
+
+                // ------------------------------------------------------------ 6
+                stage('Analyse SonarQube') {
+                    steps {
+                        withSonarQubeEnv('sonarqube') {
+                            sh """
+                              ${MVN} ${SONAR_PLUGIN}:sonar \
+                                -Dsonar.projectKey=${SONAR_KEY} \
+                                -Dsonar.projectName='Events · ${FEATURE_SLUG}' \
+                                -Dsonar.projectVersion=${APP_VERSION} \
+                                -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                            """
+                        }
+                    }
+                }
+
+                // ------------------------------------------------------------ 7
+                stage('Quality Gate') {
+                    steps {
+                        timeout(time: 10, unit: 'MINUTES') {
+                            waitForQualityGate abortPipeline: true
+                        }
+                    }
+                }
+
+                // ------------------------------------------------------------ 8
+                stage('Publication JAR · Nexus') {
+                    steps {
+                        withCredentials([usernamePassword(credentialsId: 'nexus-credentials',
+                                                          usernameVariable: 'NEXUS_USR', passwordVariable: 'NEXUS_PSW')]) {
+                            sh """
+                              ${MVN} -s ci/maven-settings.xml deploy -DskipTests \
+                                -DaltDeploymentRepository=nexus::default::${env.NEXUS_URL}/repository/maven-snapshots/
+                            """
+                        }
+                    }
+                }
+
+                // ------------------------------------------------------------ 9
+                stage('Image Docker') {
+                    steps {
+                        sh '''
+                          docker build --pull \
+                            --label org.opencontainers.image.revision=$GIT_SHORT \
+                            --label org.opencontainers.image.version=$APP_VERSION \
+                            --label tn.fst.feature=$FEATURE_SLUG \
+                            --label tn.fst.owner=$OWNER_SLUG \
+                            -t $IMAGE .
+                        '''
+                    }
+                }
+
+                // ------------------------------------------------------------ 10
+                stage('Scan image · Trivy') {
+                    steps {
+                        // trivy lit l'image directement via /var/run/docker.sock monté dans le conteneur Jenkins
+                        sh '''
+                          touch .trivyignore
+                          trivy image --severity CRITICAL --ignore-unfixed --exit-code 0 \
+                            --ignorefile .trivyignore --format table --output trivy-image.txt "$IMAGE"
+                          cat trivy-image.txt
+                        '''
+                    }
+                }
+
+                // ------------------------------------------------------------ 11
+                stage('Push image · Amazon ECR') {
+                    steps {
+                        script {
+                            withAws {
+                                sh '''
+                                  aws ecr get-login-password --region "$AWS_REGION" \
+                                    | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+                                  docker push "$IMAGE"
+                                  docker logout "$ECR_REGISTRY"
+                                '''
+                            }
+                        }
+                    }
+                }
+
+                // ------------------------------------------------------------ 12
+                stage('Promotion GitOps') {
+                    steps {
+                        // Jenkins ne déploie pas : il écrit l'état voulu dans le dépôt plateforme.
+                        // L'ApplicationSet Argo CD crée l'environnement events-participant s'il est nouveau.
+                        withCredentials([usernamePassword(credentialsId: 'github-credentials',
+                                                          usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                            sh '''
+                              set +x
+                              rm -rf gitops-work
+                              AUTH="AUTHORIZATION: basic $(printf '%s' "$GIT_USER:$GIT_TOKEN" | base64 -w0)"
+                              git -c http.extraheader="$AUTH" clone --branch "$GITOPS_BRANCH" --depth 20 \
+                                "https://github.com/$PLATFORM_REPO.git" gitops-work
+                              git -C gitops-work config http.extraheader "$AUTH"
+                              mkdir -p "gitops-work/envs/$ENV_NAME"
+                            '''
+                            writeFile file: "gitops-work/envs/${env.ENV_NAME}/config.json",
+                                      text: """{ "namespace": "${env.K8S_NAMESPACE}", "profile": "${env.HELM_PROFILE}", "owner": "${env.OWNER_SLUG}" }
+"""
+                            writeFile file: "gitops-work/envs/${env.ENV_NAME}/values.yaml",
+                                      text: """# Généré par Jenkins — build #${env.BUILD_NUMBER} — commit ${env.GIT_SHORT} — ne pas modifier à la main
+feature: ${env.FEATURE_SLUG}
+owner: ${env.OWNER_SLUG}
+image:
+  repository: ${env.ECR_REGISTRY}/${env.APP_NAME}
+  tag: ${env.IMAGE_TAG}
+ingress:
+  host: ${env.APP_HOST}
+"""
+                            sh '''
+                              set +x
+                              cd gitops-work
+                              git config user.name  "Jenkins FST"
+                              git config user.email "jenkins@fst-events.local"
+                              git add "envs/$ENV_NAME"
+                              git diff --cached --quiet || git commit -m "deploy($ENV_NAME): $IMAGE_TAG [build #$BUILD_NUMBER · $OWNER]"
+
+                              PUSHED=false
+                              for i in 1 2 3 4 5; do
+                                if git push origin "HEAD:$GITOPS_BRANCH"; then PUSHED=true; break; fi
+                                [ "$i" -lt 5 ] && git pull --rebase origin "$GITOPS_BRANCH"
+                              done
+                              [ "$PUSHED" = true ] || { echo "Échec du push GitOps après cinq tentatives."; exit 1; }
+                              git rev-parse HEAD > ../gitops-revision.txt
+                            '''
+                        }
+                    }
+                }
+
+                // ------------------------------------------------------------ 13
+                stage('Synchronisation Argo CD') {
+                    steps {
+                        script {
+                            // On attend qu'Argo CD ait appliqué EXACTEMENT notre commit et que l'appli soit saine.
+                            // L'ApplicationSet scrute Git toutes les ~3 min : la 1re fois, l'Application apparaît avec ce délai.
+                            // Adresse et token d'Argo CD : fichiers créés par Jenkinsfile.infra (ils changent à chaque cluster).
+                            sh '''
+                              set +x
+                              [ -s "$ARGOCD_DIR/token" ] || { echo "Token Argo CD absent : lance Jenkinsfile.infra (ACTION=apply)."; exit 1; }
+                              export ARGOCD_SERVER=$(cat "$ARGOCD_DIR/server")
+                              export ARGOCD_AUTH_TOKEN=$(cat "$ARGOCD_DIR/token")
+                              APP="events-$ENV_NAME"
+                              WANTED=$(cat gitops-revision.txt)
+                              for i in $(seq 1 60); do
+                                J=$(argocd app get "$APP" --refresh -o json 2>/dev/null || true)
+                                REV=$(echo "$J" | jq -r '([.status.sync.revision // empty] + (.status.sync.revisions // [])) | join(",")')
+                                REV_MATCH=$(echo "$J" | jq -r --arg wanted "$WANTED" '([.status.sync.revision // empty] + (.status.sync.revisions // [])) | index($wanted) != null')
+                                SYNC=$(echo "$J" | jq -r '.status.sync.status // empty')
+                                HEALTH=$(echo "$J" | jq -r '.status.health.status // empty')
+                                echo "[$i] $APP révision=$REV commit-attendu=$REV_MATCH sync=$SYNC santé=$HEALTH"
+                                if [ "$REV_MATCH" = "true" ] && [ "$SYNC" = "Synced" ] && [ "$HEALTH" = "Healthy" ]; then
+                                  echo "Déployé et sain."; exit 0
+                                fi
+                                if [ "$REV_MATCH" = "true" ] && [ "$HEALTH" = "Degraded" ]; then
+                                  echo "Déploiement dégradé : voir l'interface Argo CD."; exit 1
+                                fi
+                                sleep 10
+                              done
+                              echo "Délai dépassé (10 min)."; exit 1
+                            '''
+                            env.LB_IP = lbIp()
+                            echo "Load balancer ingress-nginx : ${env.LB_IP}  (${env.APP_HOST})"
+                        }
+                    }
+                }
+
+                // ------------------------------------------------------------ 14
+                stage('Tests post-déploiement') {
+                    parallel {
+                        stage('Smoke tests') {
+                            steps {
+                                sh '''
+                                  BASE="http://$APP_HOST/events"
+                                  C="curl --resolve $APP_HOST:80:$LB_IP"
+                                  HEALTH=$($C -fsS --retry 10 --retry-delay 6 --retry-all-errors "$BASE/actuator/health/readiness")
+                                  echo "$HEALTH"
+                                  echo "$HEALTH" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"' || {
+                                    echo "Readiness Actuator n'est pas UP."; exit 1;
+                                  }
+                                  $C -fsS --retry 10 --retry-delay 6 --retry-all-errors -o /dev/null "$BASE/actuator/prometheus"
+                                  echo "Endpoint Prometheus disponible."
+
+                                  for endpoint in "$BASE/event-stats/summary" "$BASE/event/"; do
+                                    STATUS=$($C -sS -o /dev/null -w '%{http_code}' "$endpoint" || true)
+                                    echo "Endpoint $endpoint : HTTP $STATUS"
+                                  done
+                                '''
+                            }
+                        }
+                        stage('DAST · OWASP ZAP') {
+                            steps {
+                                // rapport seulement (|| true) : ZAP ne bloque jamais sur une feature
+                                sh 'docker run --rm --add-host "$APP_HOST:$LB_IP" $ZAP_IMAGE zap-baseline.py -t "http://$APP_HOST/events/" -I -m 2 || true'
+                            }
                         }
                     }
                 }
@@ -369,63 +350,54 @@ EOF
         always {
             archiveArtifacts allowEmptyArchive: true,
                              artifacts: 'trivy-*.txt, .trivyignore, gitleaks-report.json, target/site/jacoco/**'
-            sh 'docker image rm -f "$IMAGE" >/dev/null 2>&1 || true'
+            sh 'docker image rm -f "$IMAGE" >/dev/null 2>&1 || true; rm -rf gitops-work .kubeconfig'
         }
-        success {
-            script {
-                if (env.DEPLOY == 'true') {
-                    echo "${env.FEATURE_SLUG} déployée : http://${env.APP_HOST}/events/  (Grafana : feature = ${env.K8S_NAMESPACE})"
-                }
-                notifyTeam('SUCCESS', 'good')
-            }
-        }
-        failure {
-            script { notifyTeam('FAILURE', 'danger') }
-        }
+        success { script { notifyTeam('SUCCESS', 'good') } }
+        failure { script { notifyTeam('FAILURE', 'danger') } }
     }
 }
 
 // =============================================================================
-//  Fonctions utilitaires — la répartition des features est centralisée ICI
+//  Fonctions utilitaires
 // =============================================================================
+
+// Les 3 clés temporaires du Learner Lab, injectées en variables d'environnement
+def withAws(Closure body) {
+    withCredentials([
+        string(credentialsId: 'aws_access_key_id',     variable: 'AWS_ACCESS_KEY_ID'),
+        string(credentialsId: 'aws_secret_access_key', variable: 'AWS_SECRET_ACCESS_KEY'),
+        string(credentialsId: 'aws_session_token',     variable: 'AWS_SESSION_TOKEN')
+    ]) { body() }
+}
+
+// IP du Network Load Balancer d'ingress-nginx (le DNS d'un NLB neuf peut mettre quelques minutes à répondre)
+def lbIp() {
+    def ip = ''
+    withAws {
+        ip = sh(returnStdout: true, script: '''
+          aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER" >/dev/null
+          H=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          for i in $(seq 1 30); do
+            IP=$(getent hosts "$H" | awk 'NR==1{print $1}')
+            [ -n "$IP" ] && break
+            sleep 10
+          done
+          echo "$IP"
+        ''').trim()
+    }
+    if (!ip) { error 'Load balancer ingress-nginx introuvable : lance Jenkinsfile.infra (ACTION=apply) d\'abord.' }
+    return ip
+}
 
 def ownerOf(String branch) {
     def owners = [
-        'feature/event-statistics': 'Roudayna Kouka',
-        'feature/initial-setup'   : 'Roudayna Kouka',
-        'feature/ci-cd-pipeline'  : 'Roudayna Kouka',
-        'feature/participant'     : 'Farah Baraket',
-        'feature/logistics'       : 'Ahlem Mastouri',
-        'feature/event'           : 'Nour Mustapha',
-        'feature/feedback'        : 'Emna Ouarteni',
+        'feature/participant': 'Farah Baraket',
     ]
     return owners[branch] ?: 'Equipe IGL5-G2'
 }
 
-def branchType(String branch) {
-    if (branch == 'main')               return 'main'
-    if (branch == 'develop')            return 'develop'
-    if (branch.startsWith('release/'))  return 'release'
-    if (branch.startsWith('hotfix/'))   return 'hotfix'
-    return 'feature'
-}
-
 def featureSlug(String branch) {
-    if (branch == 'main') return 'prod'
-    if (branch == 'develop') return 'staging'
     return slugify(branch.replaceFirst(/^(feature|release|hotfix)\//, ''))
-}
-
-def namespaceFor(String type, String slug) {
-    if (type == 'main') return 'events-prod'
-    if (type in ['develop', 'release', 'hotfix']) return 'events-staging'
-    return "events-${slug}"
-}
-
-def profileFor(String type) {
-    if (type == 'main') return 'prod'
-    if (type in ['develop', 'release', 'hotfix']) return 'staging'
-    return 'review'
 }
 
 def slugify(String s) {
@@ -437,6 +409,7 @@ def slugify(String s) {
 }
 
 def notifyTeam(String status, String color) {
+    if (!env.FEATURE_SLUG) return            // branche ignorée : rien à notifier
     def msg = "${status} · ${env.FEATURE_SLUG} (#${env.BUILD_NUMBER}) · ${env.OWNER} · ${env.BUILD_URL}"
     try {
         slackSend(channel: '#igl5-g2-ci', color: color, message: msg)

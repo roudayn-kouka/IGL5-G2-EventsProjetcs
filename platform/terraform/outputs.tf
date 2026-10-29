@@ -1,14 +1,14 @@
 output "devops_public_ip" {
   description = "IP élastique de l'usine DevOps"
-  value       = aws_eip.devops.public_ip
+  value       = one(aws_eip.devops[*].public_ip)
 }
 
 output "devops_urls" {
-  value = {
-    jenkins   = "https://jenkins.${aws_eip.devops.public_ip}.sslip.io"
-    sonarqube = "https://sonar.${aws_eip.devops.public_ip}.sslip.io"
-    nexus     = "https://nexus.${aws_eip.devops.public_ip}.sslip.io"
-  }
+  value = var.create_devops_ec2 ? {
+    jenkins   = "https://jenkins.${aws_eip.devops[0].public_ip}.sslip.io"
+    sonarqube = "https://sonar.${aws_eip.devops[0].public_ip}.sslip.io"
+    nexus     = "https://nexus.${aws_eip.devops[0].public_ip}.sslip.io"
+  } : {}
 }
 
 output "ecr_repository_url" {
