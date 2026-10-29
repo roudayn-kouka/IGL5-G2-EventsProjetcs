@@ -389,8 +389,8 @@ EOF
 
         echo "Argo CD synchronization timed out."
         exit 1
-        SCRIPT
-        '''
+SCRIPT
+        '''.stripIndent()
                 }
             }
         }
@@ -457,8 +457,8 @@ EOF
 
         echo "Prometheus: HTTP 200"
         echo "All smoke tests passed."
-        SCRIPT
-        '''
+SCRIPT
+        '''.stripIndent()
                 }
             }
         }
