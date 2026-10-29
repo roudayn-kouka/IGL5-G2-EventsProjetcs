@@ -1,32 +1,34 @@
-# =============================================================================
-#  AWS Academy (Learner Lab) : copier en terraform.tfvars (ignoré par Git)
-#    cp terraform.tfvars.academy.example terraform.tfvars
-#  Limites du lab : régions us-east-1 / us-west-2, instances « large » au maximum,
-#  9 instances et 32 vCPU au total, aucune création de rôle IAM.
-#  Mode lab = lab_role_arn non vide : LabRole pour EKS et ses nœuds,
-#  LabInstanceProfile pour l'EC2 DevOps, pas de fournisseur OIDC (IRSA).
-# =============================================================================
-region = "us-east-1" # ou us-west-2; doit être la région de « aws configure get region »
+# Copy to terraform.tfvars (ignored). Read docs/ACADEMY-DEMO.md first.
+region = "us-east-1"
+project = "fst-events"
+enable_devops_ec2 = false
+argocd_internal_load_balancer = false
 
-# ARN de LabRole : aws iam get-role --role-name LabRole --query Role.Arn --output text
-lab_role_arn = "arn:aws:iam::<compte>:role/LabRole"
+# Full monitoring + Argo + five features + staging/prod need more than 8 GiB raw.
+node_instance_type = "t3.large"
+worker_count = 2
+# Only used if the optional host is enabled:
+devops_instance_type = "t3.large"
+cluster_version = "1.34" # standard support ends 2026-12-02; verify before use
 
-# Tailles « large » au maximum : 1 EC2 DevOps + 2 à 4 nœuds EKS = 5 instances, 10 vCPU au plus
-devops_instance_type = "t3.large" # 8 Go : Ansible active le profil mémoire réduite (swap 8 Go)
-node_instance_type   = "t3.large"
+lab_role_arn = "REPLACE_WITH_LABROLE_ARN"
+admin_cidr = "REPLACE_WITH_PUBLIC_IPV4/32"
+platform_repo_url = "https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git"
+# Child manifests/chart sources use main; reviewed changes must exist there.
+gitops_revision = "main"
+# Explicit consent to image deletion during a later confirmed demo teardown:
+ecr_force_delete = true
+# Supply TF_VAR_grafana_admin_password securely. No committed passwords/tokens.
+# Slack defaults empty. Only enable notifications with real secrets supplied securely.
+# SSH key is read ONLY if enable_devops_ec2=true. Windows example:
+# ssh_public_key_path = "C:/Users/user/.ssh/id_ed25519.pub"
+# devops_ami_id = "ami-..." # pin an Ubuntu AMI when enabling the optional host
 
-# Version Kubernetes : choisir une version en support STANDARD. Une version en support
-# étendu est facturée 6 fois plus (0,60 $/h au lieu de 0,10 $/h pour le plan de contrôle)
-# et consomme vite le crédit du lab. Lister les versions et leur statut :
-#   aws eks describe-cluster-versions --region us-east-1 \
-#     --query 'clusterVersions[?versionStatus==`STANDARD_SUPPORT`].[clusterVersion,endOfStandardSupportDate]' \
-#     --output table
-# Prendre la plus récente des versions STANDARD_SUPPORT (valeur ci-dessous à vérifier).
-cluster_version = "1.34"
-
-platform_repo_url      = "https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git"
-admin_cidr             = "196.203.10.20/32" # votre IP publique : curl -s https://checkip.amazonaws.com
-ssh_public_key_path    = "~/.ssh/id_ed25519.pub"
-grafana_admin_password = "change-me"
-slack_bot_token        = "xoxb-..."                             # Argo CD Notifications
-slack_webhook_url      = "https://hooks.slack.com/services/..." # Alertmanager
+# Compatible versions returned by us-east-1 DescribeAddonVersions on 2026-10-29.
+addon_versions = {
+  coredns            = "v1.13.2-eksbuild.62"
+  kube-proxy         = "v1.34.6-eksbuild.62"
+  vpc-cni            = "v1.23.2-eksbuild.8"
+  aws-ebs-csi-driver = "v1.67.2-eksbuild.1"
+  metrics-server    = "v0.9.0-eksbuild.14"
+}

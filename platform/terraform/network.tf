@@ -5,7 +5,7 @@ data "aws_availability_zones" "available" {
 # VPC sur 2 zones de disponibilité : sous-réseaux publics (NLB, usine DevOps) et privés (nœuds EKS)
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
-  version = "~> 5.16"
+  version = "5.16.0"
 
   name = var.project
   cidr = "10.20.0.0/16"

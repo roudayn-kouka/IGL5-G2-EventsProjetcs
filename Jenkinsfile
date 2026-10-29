@@ -215,13 +215,77 @@ pipeline {
         stage('Push image · Amazon ECR') {
             when { expression { env.DEPLOY == 'true' } }
             steps {
-                // Authentification par le rôle IAM de l'EC2 : aucune clé AWS dans Jenkins
-                sh '''
-                  aws ecr get-login-password --region "$AWS_REGION" \
-                    | docker login --username AWS --password-stdin "$ECR_REGISTRY"
-                  docker push "$IMAGE"
-                  docker logout "$ECR_REGISTRY"
-                '''
+                script {
+                    // SECURITY: scope this credential to a trusted publishing job/folder
+                    // and isolated agent/Docker daemon. 'when' is not a trust boundary.
+                    def pushToEcr = {
+                        sh(label: 'Authenticate and push to ECR', script: '''#!/usr/bin/env bash
+set +x
+set -euo pipefail
+: "${AWS_REGION:?AWS_REGION must be configured before the build}"
+: "${ECR_REGISTRY:?ECR_REGISTRY must be configured before the build}"
+: "${IMAGE:?IMAGE must be configured before the build}"
+export AWS_PAGER=''
+# Use the default file profile or IMDS, without inherited credential/profile overrides.
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
+unset AWS_PROFILE AWS_DEFAULT_PROFILE
+unset AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE AWS_CONTAINER_CREDENTIALS_RELATIVE_URI
+unset AWS_CONTAINER_CREDENTIALS_FULL_URI AWS_CONTAINER_AUTHORIZATION_TOKEN AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE
+export DOCKER_CONFIG
+DOCKER_CONFIG=$(mktemp -d)
+cleanup() {
+    status=$?
+    trap - EXIT
+    docker logout "$ECR_REGISTRY" >/dev/null 2>&1 || true
+    rm -rf -- "$DOCKER_CONFIG"
+    exit "$status"
+}
+trap cleanup EXIT
+if ! account=$(aws sts get-caller-identity --region "$AWS_REGION" --query Account --output text); then
+    echo 'ERROR: AWS authentication failed. Check the selected credentials and Academy session expiry.' >&2
+    exit 1
+fi
+if [[ "$ECR_REGISTRY" != "$account.dkr.ecr.$AWS_REGION.amazonaws.com" ]]; then
+    echo 'ERROR: ECR_REGISTRY does not match the authenticated AWS account and region.' >&2
+    exit 1
+fi
+if [[ "$IMAGE" != "$ECR_REGISTRY/events-app:"* ]]; then
+    echo 'ERROR: IMAGE must already be tagged for ECR_REGISTRY/events-app before this stage.' >&2
+    exit 1
+fi
+if ! aws ecr describe-repositories --region "$AWS_REGION" --repository-names events-app >/dev/null; then
+    echo 'ERROR: Cannot access the events-app ECR repository. Check its existence and permissions.' >&2
+    exit 1
+fi
+# pipefail ensures an AWS token failure cannot be hidden by docker login succeeding.
+if ! aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"; then
+    echo 'ERROR: ECR authentication failed.' >&2
+    exit 1
+fi
+if ! docker push "$IMAGE"; then
+    echo 'ERROR: Docker push to ECR failed.' >&2
+    exit 1
+fi
+''')
+                    }
+                    def authMode = env.AWS_AUTH_MODE ?: 'academy'
+                    if (authMode == 'academy') {
+                        withCredentials([file(credentialsId: 'aws-academy-credentials',
+                                              variable: 'AWS_SHARED_CREDENTIALS_FILE')]) {
+                            withEnv(['AWS_CONFIG_FILE=/dev/null', 'AWS_EC2_METADATA_DISABLED=true']) {
+                                pushToEcr()
+                            }
+                        }
+                    } else if (authMode == 'instance-role') {
+                        // Future EC2 deployment: use IMDS, without a Jenkins AWS secret.
+                        withEnv(['AWS_SHARED_CREDENTIALS_FILE=/dev/null', 'AWS_CONFIG_FILE=/dev/null',
+                                 'AWS_EC2_METADATA_DISABLED=false']) {
+                            pushToEcr()
+                        }
+                    } else {
+                        error 'AWS_AUTH_MODE must be academy or instance-role.'
+                    }
+                }
             }
         }
 

@@ -20,18 +20,26 @@ configs:
 %{ endif ~}
 
 server:
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 300m, memory: 256Mi }
   service:
-    # NLB INTERNE : seul Jenkins (dans le VPC) parle à l'API Argo CD ; l'interface s'ouvre par port-forward
-    type: LoadBalancer
+    # Never expose the Argo API publicly. Academy uses a private port-forward.
+    type: ${internal_load_balancer ? "LoadBalancer" : "ClusterIP"}
+%{ if internal_load_balancer ~}
     annotations:
       service.beta.kubernetes.io/aws-load-balancer-type: nlb
       service.beta.kubernetes.io/aws-load-balancer-internal: "true"
     loadBalancerSourceRanges:
       - ${vpc_cidr}
+%{ endif ~}
 
 # Argo CD Notifications -> Slack (#igl5-g2-deploiements)
 notifications:
-  enabled: true
+  resources:
+    requests: { cpu: 25m, memory: 32Mi }
+    limits: { cpu: 100m, memory: 64Mi }
+  enabled: ${slack_bot_token != ""}
   secret:
     items:
       slack-token: "${slack_bot_token}"
@@ -56,3 +64,25 @@ notifications:
     trigger.on-health-degraded: |
       - when: app.status.health.status == 'Degraded'
         send: [app-health-degraded]
+
+# Single default replicas are preserved; requests make scheduling capacity visible.
+controller:
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 768Mi }
+repoServer:
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+applicationSet:
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+redis:
+  resources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { cpu: 100m, memory: 128Mi }
+dex:
+  resources:
+    requests: { cpu: 25m, memory: 32Mi }
+    limits: { cpu: 100m, memory: 64Mi }

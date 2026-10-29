@@ -35,16 +35,16 @@ resource "helm_release" "argocd" {
   name             = "argocd"
   repository       = "https://argoproj.github.io/argo-helm"
   chart            = "argo-cd"
-  version          = "7.7.11"
+  version          = "9.1.7" # Argo CD 3.2, tested with Kubernetes 1.34
   namespace        = "argocd"
   create_namespace = true
 
   values = [templatefile("${path.module}/values/argocd.yaml.tftpl", {
-    platform_repo_url = var.platform_repo_url
-    github_token      = var.github_token
-    slack_bot_token   = var.slack_bot_token
-    devops_cidr       = "${aws_eip.devops.public_ip}/32"
-    vpc_cidr          = module.vpc.vpc_cidr_block
+    platform_repo_url      = var.platform_repo_url
+    github_token           = var.github_token
+    slack_bot_token        = var.slack_bot_token
+    internal_load_balancer = var.argocd_internal_load_balancer
+    vpc_cidr               = module.vpc.vpc_cidr_block
   })]
 
   depends_on = [module.eks]
@@ -65,7 +65,7 @@ resource "helm_release" "argocd_root" {
         project   = "default"
         source = {
           repoURL        = var.platform_repo_url
-          targetRevision = "main"
+          targetRevision = var.gitops_revision
           path           = "platform/gitops/platform/apps"
         }
         destination = {

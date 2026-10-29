@@ -1,0 +1,42 @@
+name: events-local-ci
+services:
+  agent:
+    image: events-jenkins-agent:jdk17-maven3.9.11
+    build:
+      context: .
+    container_name: events-jenkins-agent
+    hostname: events-jenkins-agent
+    restart: unless-stopped
+    init: true
+    environment:
+      # Public key only. Private key belongs in Jenkins SSH credentials.
+      JENKINS_AGENT_SSH_PUBKEY: ${JENKINS_AGENT_SSH_PUBKEY:-}
+    volumes:
+      - agent-work:/home/jenkins/agent
+      - maven-cache:/home/jenkins/.m2
+      - ssh-config:/etc/ssh
+      - /var/run/docker.sock:/var/run/docker.sock
+      - agent-work:/var/lib/docker/volumes/events-ci-agent-work/_data
+    networks:
+      - jenkins
+    mem_limit: 3g
+    cpus: 2
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /var/run/sshd.pid && kill -0 $$(cat /var/run/sshd.pid)"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+    group_add:
+      - "0"
+
+networks:
+  jenkins:
+    external: true
+    name: jenkins-net
+volumes:
+  agent-work:
+    name: events-ci-agent-work
+  maven-cache:
+    name: events-ci-maven-cache
+  ssh-config:
+    name: events-ci-agent-ssh-config

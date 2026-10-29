@@ -1,0 +1,56 @@
+// Separate local build verification; does not replace or certify the shared CI.
+// Paste into a local Pipeline job. No push or SCM change is needed.
+pipeline {
+    agent { label 'events-jdk17' }
+    options {
+        timestamps()
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        skipDefaultCheckout(true)
+    }
+    stages {
+        stage('Checkout feature/feedback') {
+            steps {
+                git branch: 'feature/feedback',
+                    url: 'https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git'
+                sh 'git rev-parse HEAD'
+            }
+        }
+        stage('Verify JDK 17 tools') {
+            steps {
+                sh '''
+                    set -eu
+                    java -version
+                    mvn -version
+                    git --version
+                    test "$(java -XshowSettings:properties -version 2>&1 | awk '/java.specification.version =/ {print $3}')" = 17
+                '''
+            }
+        }
+        stage('Build Maven') {
+            steps {
+                sh 'mvn -B -ntp versions:set -DnewVersion=1.0.0-feedback-SNAPSHOT -DgenerateBackupPoms=false'
+                sh 'mvn -B -ntp clean compile'
+            }
+        }
+        stage('Tests & couverture') {
+            steps {
+                sh 'mvn -B -ntp verify'
+            }
+            post {
+                always {
+                    junit testResults: 'target/surefire-reports/*.xml'
+                    recordCoverage(failOnError: true,
+                                   tools: [[parser: 'JACOCO', pattern: 'target/site/jacoco/jacoco.xml']],
+                                   id: 'jacoco', name: 'Couverture JaCoCo')
+                }
+            }
+        }
+    }
+    post {
+        always {
+            archiveArtifacts allowEmptyArchive: false,
+                artifacts: 'target/surefire-reports/**, target/site/jacoco/**'
+        }
+    }
+}

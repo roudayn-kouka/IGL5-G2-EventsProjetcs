@@ -2,7 +2,7 @@
 resource "aws_ecr_repository" "events_app" {
   name                 = "events-app"
   image_tag_mutability = "IMMUTABLE" # un tag = une version, impossible à écraser
-  force_delete         = true
+  force_delete         = var.ecr_force_delete
 
   image_scanning_configuration {
     scan_on_push = true # deuxième scan de vulnérabilités, côté AWS

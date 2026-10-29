@@ -28,15 +28,15 @@ ingress_dns=""
 while (( SECONDS < deadline )); do
   argocd_dns="$(kubectl -n argocd get svc argocd-server -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)"
   ingress_dns="$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)"
-  if [[ -n "$argocd_dns" && -n "$ingress_dns" ]]; then
+  if [[ -n "$ingress_dns" ]]; then
     break
   fi
   printf 'En attente des adresses NLB (Argo CD=%s, ingress=%s)...\n' "${argocd_dns:-en attente}" "${ingress_dns:-en attente}"
   sleep "$POLL_SECONDS"
 done
 
-if [[ -z "$argocd_dns" || -z "$ingress_dns" ]]; then
-  printf 'Délai dépassé après %s secondes : les deux NLB doivent avoir une adresse.\n' "$TIMEOUT_SECONDS" >&2
+if [[ -z "$ingress_dns" ]]; then
+  printf 'Délai dépassé après %s secondes : le NLB ingress doit avoir une adresse.\n' "$TIMEOUT_SECONDS" >&2
   exit 1
 fi
 
@@ -47,7 +47,8 @@ if [[ -z "$ingress_ip" ]]; then
 fi
 
 apps_domain="${ingress_ip}.sslip.io"
-argocd_server="${argocd_dns}:80"
+argocd_server="${ARGOCD_SERVER:-events-argocd-tunnel:8080}"
+if [[ -n "$argocd_dns" ]]; then argocd_server="${argocd_dns}:80"; fi
 python3 - "$DRY_RUN" "$argocd_server" "$apps_domain" "$ROOT" <<'PY'
 from pathlib import Path
 import re

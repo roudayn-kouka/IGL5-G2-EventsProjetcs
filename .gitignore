@@ -38,10 +38,16 @@ build/
 **/.terraform/
 **/*.tfstate
 **/*.tfstate.*
-**/terraform.tfvars
+**/*.tfvars
 **/backend.hcl
 **/crash.log
 **/crash.*.log
+**/*.tfvars.json
+**/*.auto.tfvars
+**/*.auto.tfvars.json
+**/*.tfplan
+**/destroy-plan.json
+**/.terraform-validation/
 # Ansible : Vault (chiffré ou non, jamais versionné), copies déchiffrées, runtime généré
 platform/ansible/group_vars/devops/vault.yml
 platform/ansible/group_vars/devops/vault.yml.dec

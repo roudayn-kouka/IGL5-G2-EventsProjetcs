@@ -1,14 +1,14 @@
 output "devops_public_ip" {
   description = "IP élastique de l'usine DevOps"
-  value       = aws_eip.devops.public_ip
+  value       = try(aws_eip.devops[0].public_ip, null)
 }
 
 output "devops_urls" {
-  value = {
-    jenkins   = "https://jenkins.${aws_eip.devops.public_ip}.sslip.io"
-    sonarqube = "https://sonar.${aws_eip.devops.public_ip}.sslip.io"
-    nexus     = "https://nexus.${aws_eip.devops.public_ip}.sslip.io"
-  }
+  value = var.enable_devops_ec2 ? {
+    jenkins   = "https://jenkins.${aws_eip.devops[0].public_ip}.sslip.io"
+    sonarqube = "https://sonar.${aws_eip.devops[0].public_ip}.sslip.io"
+    nexus     = "https://nexus.${aws_eip.devops[0].public_ip}.sslip.io"
+  } : {}
 }
 
 output "ecr_repository_url" {
@@ -28,11 +28,14 @@ output "kubeconfig_command" {
   value = "aws eks update-kubeconfig --name ${module.eks.cluster_name} --region ${var.region}"
 }
 
+output "vpc_id" {
+  value = module.vpc.vpc_id
+}
+
+output "ecr_registry" {
+  value = split("/", aws_ecr_repository.events_app.repository_url)[0]
+}
+
 output "next_steps" {
-  value = <<-EOT
-    1. cd ../ansible && ansible-galaxy collection install -r requirements.yml
-    2. ansible-playbook site.yml --ask-vault-pass
-    3. Argo CD : kubectl -n argocd port-forward svc/argocd-server 8080:80
-       (mot de passe : kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)
-  EOT
+  value = var.enable_devops_ec2 ? "Configure the optional EC2 with Ansible, then follow docs/ACADEMY-DEMO.md." : "Use local Jenkins and the private port-forward procedure in docs/ACADEMY-DEMO.md."
 }

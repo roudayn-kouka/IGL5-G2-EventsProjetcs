@@ -1,5 +1,9 @@
 # Plateforme Events — Infrastructure as Code et GitOps
 
+> AWS Academy with LOCAL Jenkins: follow [the PowerShell demo runbook](../docs/ACADEMY-DEMO.md).
+> It supersedes the historical full-EC2/bootstrap/DynamoDB steps below for this mode.
+> DevOps EC2 is optional, Argo defaults to ClusterIP, and teardown confirms BEFORE cleanup.
+
 Le dossier `platform/` du dépôt unique `IGL5-G2-EventsProjetcs` contient l'infrastructure AWS, la configuration des outils DevOps et les manifestes Argo CD du projet Events (FST, IGL5 groupe 2). Le code Spring Boot, les tests et le `Jenkinsfile` sont à la racine du dépôt ([README principal](../README.md)). Les chemins ci-dessous sont relatifs à `platform/`.
 
 Terraform crée les ressources AWS et amorce Argo CD. Ansible configure l'EC2 d'outillage. Argo CD déploie ensuite les applications à partir de Git. Jenkins construit, teste et publie les artefacts, puis écrit le tag voulu dans `envs/<env>/` sur la branche orpheline `gitops`; Jenkins n'a pas d'accès direct au cluster.

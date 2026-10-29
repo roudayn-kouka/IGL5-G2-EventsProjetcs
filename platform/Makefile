@@ -15,7 +15,7 @@ help:
 	@echo "Cibles disponibles :"
 	@awk -F ':|##' '/^[a-zA-Z0-9_-]+:.*##/ { printf "  %-18s %s\n", $$1, $$3 }' $(MAKEFILE_LIST)
 
-bootstrap-state: ## Crée le bucket S3 chiffré/versionné et la table DynamoDB
+bootstrap-state: ## Crée le bucket S3 chiffré/versionné (verrou S3 natif)
 	@echo "Initialisation du backend Terraform distant (AWS CLI requis)."
 	@bash scripts/bootstrap-state.sh
 
@@ -65,5 +65,10 @@ status: ## Affiche les Applications Argo CD, les pods et les URL Terraform
 	@cd terraform && terraform output devops_urls
 
 destroy: ## Supprime l'infrastructure après nettoyage Kubernetes et confirmation
-	@echo "Nettoyage ordonné des ressources Kubernetes puis confirmation avant Terraform destroy."
+	@echo "Nettoyage ordonné des ressources Kubernetes puis confirmation avant tout nettoyage."
 	@bash scripts/destroy.sh
+
+# Destruction preview is read-only against AWS; it writes only an ignored local plan.
+.PHONY: destroy-preview
+destroy-preview: ## Preview destruction without deleting resources
+	@bash scripts/destroy.sh --preview
