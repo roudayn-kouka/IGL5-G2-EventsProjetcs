@@ -50,7 +50,7 @@ pipeline {
         GITOPS_BRANCH = 'main'                            // branche suivie par Argo CD
         // Dossier des environnements dans le depot plateforme. DOIT correspondre au valueFiles
         // de l'application Argo CD : 'envs' (racine) ou 'gitops/envs' selon la structure du depot.
-        GITOPS_ENVS_DIR = 'envs'
+        GITOPS_ENVS_DIR = 'gitops/envs'
         ARGOCD_SERVER = 'host.docker.internal:8085'       // hote:port, sans http://
     }
 
