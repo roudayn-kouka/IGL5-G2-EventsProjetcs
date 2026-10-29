@@ -44,7 +44,7 @@ public final class Mapper {
         if (p == null) return null;
         ParticipantDTO d = shallow(p);
         if (p.getEvents() != null) {
-            d.setEvents(p.getEvents().stream().map(e -> shallow(e)).collect(Collectors.toSet()));
+            d.setEvents(p.getEvents().stream().map(Mapper::shallow).collect(Collectors.toSet()));
         }
         return d;
     }
