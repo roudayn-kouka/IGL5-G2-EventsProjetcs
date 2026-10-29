@@ -105,7 +105,7 @@ platform/ansible/group_vars/devops/vault.yml.dec
 **/*.vault.dec
 platform/ansible/group_vars/devops/runtime.yml
 *.retry
-
+*/node_modules
 ### Rapports et journaux générés ###
 *.log
 trivy-*.txt
