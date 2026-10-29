@@ -212,18 +212,23 @@ pipeline {
         }
 
         // ------------------------------------------------------------ 10
-        stage('Push image · Amazon ECR') {
-            when { expression { env.DEPLOY == 'true' } }
-            steps {
-                // Authentification par le rôle IAM de l'EC2 : aucune clé AWS dans Jenkins
-                sh '''
-                  aws ecr get-login-password --region "$AWS_REGION" \
-                    | docker login --username AWS --password-stdin "$ECR_REGISTRY"
-                  docker push "$IMAGE"
-                  docker logout "$ECR_REGISTRY"
-                '''
-            }
-        }
+                stage('Push image · Amazon ECR') {
+                    when { expression { env.DEPLOY == 'true' } }
+                    steps {
+                        withCredentials([
+                            string(credentialsId: 'aws-access-key-id',     variable: 'AWS_ACCESS_KEY_ID'),
+                            string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY'),
+                            string(credentialsId: 'aws-session-token',     variable: 'AWS_SESSION_TOKEN')
+                        ]) {
+                            sh '''
+                            aws ecr get-login-password --region "$AWS_REGION" \
+                                | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+                            docker push "$IMAGE"
+                            docker logout "$ECR_REGISTRY"
+                            '''
+                        }
+                    }
+                }
 
         // ------------------------------------------------------------ 11
         stage('Approbation production') {
