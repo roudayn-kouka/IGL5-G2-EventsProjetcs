@@ -41,6 +41,8 @@ pipeline {
         ARGOCD_OPTS    = '--grpc-web --plaintext'
         DOCKERHUB_REPO = 'nour1mustapha/events-app'   // <-- À ADAPTER
         MAIL_TO        = 'your-team@example.com'          // <-- À ADAPTER
+        PLATFORM_REPO = 'nm727/fst-events-platform'
+        GITOPS_BRANCH = 'main'
     }
 
     stages {
