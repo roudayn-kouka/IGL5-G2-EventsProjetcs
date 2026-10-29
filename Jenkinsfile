@@ -35,7 +35,7 @@ pipeline {
         TRIVY_IMAGE  = 'aquasec/trivy:0.56.2'
         GITLEAKS_IMG = 'zricethezav/gitleaks:v8.21.2'
         ZAP_IMAGE    = 'ghcr.io/zaproxy/zaproxy:stable'
-        SONAR_PLUGIN = 'org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922'
+        SONAR_PLUGIN = 'org.sonarsource.scanner.maven:sonar-maven-plugin:5.2.0.4988'
         MVN          = 'mvn -B -ntp'
         ARGOCD_OPTS  = '--grpc-web --plaintext'
     }

@@ -53,3 +53,7 @@ platform/ansible/group_vars/devops/runtime.yml
 *.log
 trivy-*.txt
 gitleaks-report.json
+
+# Secrets et sauvegardes locales Ansible
+platform/ansible/.vault_pass
+platform/ansible/roles/sonar_config/tasks/main.yml.bak
