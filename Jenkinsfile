@@ -130,6 +130,7 @@ pipeline {
                         sh '''
                         docker run --rm --volumes-from jenkins -v trivy-cache:/root/.cache $TRIVY_IMAGE fs \
                             --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 0 \
+                            --skip-db-update --skip-java-db-update \
                             --format table --output "$WORKSPACE/trivy-fs.txt" "$WORKSPACE"
                         cat trivy-fs.txt
                         '''
