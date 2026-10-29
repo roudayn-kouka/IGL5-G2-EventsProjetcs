@@ -1,0 +1,166 @@
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "events-staging",
+    "namespace": "argocd"
+  },
+  "spec": {
+    "project": "events",
+    "sources": [
+      {
+        "helm": {
+          "valueFiles": [
+            "values-staging.yaml",
+            "$values/envs/staging/values.yaml"
+          ]
+        },
+        "path": "platform/gitops/charts/events-app",
+        "repoURL": "https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git",
+        "targetRevision": "main"
+      },
+      {
+        "ref": "values",
+        "repoURL": "https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git",
+        "targetRevision": "main"
+      }
+    ],
+    "destination": {
+      "namespace": "events-staging",
+      "server": "https://kubernetes.default.svc"
+    }
+  },
+  "status": {
+    "sync": {
+      "comparedTo": {
+        "destination": {
+          "namespace": "events-staging",
+          "server": "https://kubernetes.default.svc"
+        },
+        "ignoreDifferences": [
+          {
+            "jsonPointers": [
+              "/data"
+            ],
+            "kind": "Secret",
+            "name": "events-db"
+          }
+        ],
+        "source": {
+          "repoURL": ""
+        },
+        "sources": [
+          {
+            "helm": {
+              "valueFiles": [
+                "values-staging.yaml",
+                "$values/envs/staging/values.yaml"
+              ]
+            },
+            "path": "platform/gitops/charts/events-app",
+            "repoURL": "https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git",
+            "targetRevision": "main"
+          },
+          {
+            "ref": "values",
+            "repoURL": "https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git",
+            "targetRevision": "main"
+          }
+        ]
+      },
+      "revisions": [
+        "ed44b7e673bae030113db244fafb48a81c5f493e",
+        "ed44b7e673bae030113db244fafb48a81c5f493e"
+      ],
+      "status": "Synced"
+    },
+    "health": {
+      "status": "Healthy"
+    },
+    "summary": {
+      "externalURLs": [
+        "http://staging.apps.local/events"
+      ],
+      "images": [
+        "315488743028.dkr.ecr.us-east-1.amazonaws.com/events-app:staging-6-0de6685",
+        "busybox:1.36",
+        "mysql:8.0"
+      ]
+    },
+    "operationState": {
+      "phase": "Succeeded",
+      "message": "successfully synced (all tasks run)"
+    },
+    "conditions": [],
+    "resources": [
+      {
+        "kind": "PersistentVolumeClaim",
+        "name": "mysql-data",
+        "namespace": "events-staging",
+        "status": "Synced",
+        "health": {
+          "status": "Healthy"
+        }
+      },
+      {
+        "kind": "Secret",
+        "name": "events-db",
+        "namespace": "events-staging",
+        "status": "Synced",
+        "health": null
+      },
+      {
+        "kind": "Service",
+        "name": "events-app",
+        "namespace": "events-staging",
+        "status": "Synced",
+        "health": {
+          "status": "Healthy"
+        }
+      },
+      {
+        "kind": "Service",
+        "name": "mysql",
+        "namespace": "events-staging",
+        "status": "Synced",
+        "health": {
+          "status": "Healthy"
+        }
+      },
+      {
+        "kind": "Deployment",
+        "name": "events-app",
+        "namespace": "events-staging",
+        "status": "Synced",
+        "health": {
+          "status": "Healthy"
+        }
+      },
+      {
+        "kind": "Deployment",
+        "name": "mysql",
+        "namespace": "events-staging",
+        "status": "Synced",
+        "health": {
+          "status": "Healthy"
+        }
+      },
+      {
+        "kind": "ServiceMonitor",
+        "name": "events-app",
+        "namespace": "events-staging",
+        "status": "Synced",
+        "health": null
+      },
+      {
+        "kind": "Ingress",
+        "name": "events-app",
+        "namespace": "events-staging",
+        "status": "Synced",
+        "health": {
+          "status": "Healthy"
+        }
+      }
+    ]
+  }
+}
