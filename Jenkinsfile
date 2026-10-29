@@ -102,6 +102,17 @@ pipeline {
                     }
                 }
 
+                // L'IP publique de Jenkins peut changer entre deux pushes.
+                // Ce contrôle s'exécute avec les credentials AWS du Learner Lab,
+                // avant toute commande kubectl / Argo CD.
+                stage('Acces EKS : IP actuelle de Jenkins') {
+                    steps {
+                        withAws {
+                            sh 'bash platform/scripts/ensure-eks-access.sh'
+                        }
+                    }
+                }
+
                 // ------------------------------------------------------------ 3
                 stage('Build Maven') {
                     steps {
@@ -263,7 +274,15 @@ pipeline {
                               mkdir -p "gitops-work/envs/$ENV_NAME"
                             '''
                             writeFile file: "gitops-work/envs/${env.ENV_NAME}/config.json",
-                                      text: """{ "namespace": "${env.K8S_NAMESPACE}", "profile": "${env.HELM_PROFILE}", "owner": "${env.OWNER_SLUG}" }
+                                      text: """{
+  "namespace": "${env.K8S_NAMESPACE}",
+  "profile": "${env.HELM_PROFILE}",
+  "owner": "${env.OWNER_SLUG}",
+  "feature": "${env.FEATURE_SLUG}",
+  "imageRepository": "${env.ECR_REGISTRY}/${env.APP_NAME}",
+  "imageTag": "${env.IMAGE_TAG}",
+  "host": "${env.APP_HOST}"
+}
 """
                             writeFile file: "gitops-work/envs/${env.ENV_NAME}/values.yaml",
                                       text: """# Généré par Jenkins — build #${env.BUILD_NUMBER} — commit ${env.GIT_SHORT} — ne pas modifier à la main
@@ -295,6 +314,27 @@ ingress:
                     }
                 }
 
+                // Le GitOps commit contient désormais les sept paramètres.
+                // On réapplique le bon ApplicationSet dans le cluster en place :
+                // pas besoin de relancer terraform apply ou de le modifier dans l'UI Argo CD.
+                stage('Mettre a jour ApplicationSet') {
+                    steps {
+                        withAws {
+                            sh '''
+                              set -eu
+                              aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER" >/dev/null
+                              sed 's#envs/[*]/config.json#envs/participant/config.json#' \
+                                platform/gitops/platform/apps/40-events-environments.yaml \
+                                | kubectl -n argocd apply -f -
+                              kubectl -n argocd get applicationset events-environments -o json \
+                                | jq -e '.spec.template.spec.source != null and (.spec.template.spec.sources == null)' >/dev/null \
+                                || { echo "ApplicationSet toujours multi-source : vérifier le manifest appliqué"; exit 1; }
+                              echo "ApplicationSet single-source applique."
+                            '''
+                        }
+                    }
+                }
+
                 // ------------------------------------------------------------ 13
                 stage('Synchronisation Argo CD') {
                     steps {
@@ -308,18 +348,20 @@ ingress:
                               export ARGOCD_SERVER=$(cat "$ARGOCD_DIR/server")
                               export ARGOCD_AUTH_TOKEN=$(cat "$ARGOCD_DIR/token")
                               APP="events-$ENV_NAME"
-                              WANTED=$(cat gitops-revision.txt)
+                              # La révision GitOps sert seulement à générer les paramètres.
+                              # L'Application elle-même utilise une seule source Helm sur feature/participant.
+                              # On vérifie donc le tag de l'image demandé, puis Synced et Healthy.
+                              WANTED_TAG="$IMAGE_TAG"
                               for i in $(seq 1 60); do
                                 J=$(argocd app get "$APP" --refresh -o json 2>/dev/null || true)
-                                REV=$(echo "$J" | jq -r '([.status.sync.revision // empty] + (.status.sync.revisions // [])) | join(",")')
-                                REV_MATCH=$(echo "$J" | jq -r --arg wanted "$WANTED" '([.status.sync.revision // empty] + (.status.sync.revisions // [])) | index($wanted) != null')
-                                SYNC=$(echo "$J" | jq -r '.status.sync.status // empty')
-                                HEALTH=$(echo "$J" | jq -r '.status.health.status // empty')
-                                echo "[$i] $APP révision=$REV commit-attendu=$REV_MATCH sync=$SYNC santé=$HEALTH"
-                                if [ "$REV_MATCH" = "true" ] && [ "$SYNC" = "Synced" ] && [ "$HEALTH" = "Healthy" ]; then
+                                CURRENT_TAG=$(printf '%s' "$J" | jq -r '[(.spec.source.helm.parameters // [])[] | select(.name == "image.tag") | .value] | first // ""' 2>/dev/null || true)
+                                SYNC=$(printf '%s' "$J" | jq -r '.status.sync.status // empty' 2>/dev/null || true)
+                                HEALTH=$(printf '%s' "$J" | jq -r '.status.health.status // empty' 2>/dev/null || true)
+                                echo "[$i] $APP image=$CURRENT_TAG attendue=$WANTED_TAG sync=$SYNC santé=$HEALTH"
+                                if [ "$CURRENT_TAG" = "$WANTED_TAG" ] && [ "$SYNC" = "Synced" ] && [ "$HEALTH" = "Healthy" ]; then
                                   echo "Déployé et sain."; exit 0
                                 fi
-                                if [ "$REV_MATCH" = "true" ] && [ "$HEALTH" = "Degraded" ]; then
+                                if [ "$CURRENT_TAG" = "$WANTED_TAG" ] && [ "$HEALTH" = "Degraded" ]; then
                                   echo "Déploiement dégradé : voir l'interface Argo CD."; exit 1
                                 fi
                                 sleep 10

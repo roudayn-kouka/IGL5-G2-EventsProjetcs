@@ -125,28 +125,14 @@ appset_only_env    = "${env.APPSET_ENV}"
       }
     }
 
-    // L'API EKS n'accepte que l'IP publique de ton PC (admin_cidr, fixée au moment de l'apply). Si ton IP change
-    // (box, partage de connexion, redémarrage du routeur), Terraform et kubectl tombent en « i/o timeout », y compris au destroy.
-    // On réaligne donc l'API sur ton IP actuelle avant toute action ; sans effet si le cluster n'existe pas encore.
+    // EKS existant : attend l'état ACTIVE puis ajoute automatiquement l'IP publique
+    // du Jenkins actuel à la liste autorisée. N'ouvre jamais l'API à 0.0.0.0/0.
+    // Si EKS n'existe pas encore, laisse Terraform le créer.
     stage('Autoriser ton IP sur l\'API EKS') {
       steps {
         script {
           withAws {
-            sh '''
-              if aws eks describe-cluster --name $CLUSTER --region $AWS_REGION >/dev/null 2>&1; then
-                CUR=$(aws eks describe-cluster --name $CLUSTER --region $AWS_REGION --query 'cluster.resourcesVpcConfig.publicAccessCidrs' --output text)
-                if echo "$CUR" | grep -qx "$MY_IP/32"; then
-                  echo "Ton IP ($MY_IP) est déjà autorisée sur l'API EKS."
-                else
-                  echo "L'API EKS autorise : $CUR ; ton IP actuelle est $MY_IP : mise à jour (2 à 5 min)."
-                  aws eks update-cluster-config --name $CLUSTER --region $AWS_REGION --resources-vpc-config publicAccessCidrs=$MY_IP/32
-                  sleep 30
-                  aws eks wait cluster-active --name $CLUSTER --region $AWS_REGION
-                fi
-              else
-                echo "Pas encore de cluster : rien à autoriser."
-              fi
-            '''
+            sh 'ALLOW_MISSING_EKS=1 bash platform/scripts/ensure-eks-access.sh'
           }
         }
       }
