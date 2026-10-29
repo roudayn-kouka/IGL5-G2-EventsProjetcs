@@ -1,0 +1,22 @@
+{
+  "/events/participant": {
+    "target": "http://127.0.0.1:8089",
+    "secure": false,
+    "changeOrigin": true
+  },
+  "/events/logistique": {
+    "target": "http://127.0.0.1:8089",
+    "secure": false,
+    "changeOrigin": true
+  },
+  "/events/statistiques": {
+    "target": "http://127.0.0.1:8089",
+    "secure": false,
+    "changeOrigin": true
+  },
+  "/events/event-stats": {
+    "target": "http://127.0.0.1:8089",
+    "secure": false,
+    "changeOrigin": true
+  }
+}
