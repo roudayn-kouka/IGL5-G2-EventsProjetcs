@@ -1,15 +1,17 @@
 // Job infra : Terraform installe Prometheus + Grafana sur le cluster kind.
 // ACTION = plan-only (defaut, ne change rien) | apply | destroy
 
-// Lance Terraform dans un conteneur. Le state est dans le volume Docker "tfstate".
+// Terraform dans un conteneur qui partage les volumes du conteneur Jenkins
+// (le workspace /var/jenkins_home/... est alors visible, sans chemin hote).
 def tf(String args) {
   sh """
     docker run --rm \
-      -v ${env.WORKSPACE}/${env.TF_DIR}:/tf \
-      -v tfstate:/state -w /tf \
+      --volumes-from jenkins \
+      -v tfstate:/state \
+      -w ${env.WORKSPACE}/${env.TF_DIR} \
       --add-host host.docker.internal:host-gateway \
       -e TF_IN_AUTOMATION=true \
-      -e TF_VAR_kubeconfig_path=/tf/.kubeconfig \
+      -e TF_VAR_kubeconfig_path=${env.WORKSPACE}/${env.TF_DIR}/.kubeconfig \
       hashicorp/terraform:1.9.8 ${args}
   """
 }
@@ -53,8 +55,8 @@ pipeline {
           tf('validate')
         }
         sh '''
-          docker run --rm -v "$WORKSPACE/$TF_DIR:/src" $TRIVY_IMG config \
-            --severity HIGH,CRITICAL --exit-code 0 --format table /src | tee trivy-iac.txt
+          docker run --rm --volumes-from jenkins $TRIVY_IMG config \
+            --severity HIGH,CRITICAL --exit-code 0 --format table "$WORKSPACE/$TF_DIR" | tee trivy-iac.txt
         '''
       }
     }
@@ -66,8 +68,8 @@ pipeline {
           withKube {
             tf('plan -input=false -out=tfplan')
             sh '''
-              docker run --rm -v "$WORKSPACE/$TF_DIR:/tf" -w /tf hashicorp/terraform:1.9.8 \
-                show -no-color tfplan > "$WORKSPACE/tfplan.txt"
+              docker run --rm --volumes-from jenkins -w "$WORKSPACE/$TF_DIR" \
+                hashicorp/terraform:1.9.8 show -no-color tfplan > "$WORKSPACE/tfplan.txt"
             '''
           }
         }
