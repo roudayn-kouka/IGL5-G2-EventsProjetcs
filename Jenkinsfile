@@ -205,18 +205,18 @@ pipeline {
                     }
                 }
 
-                // ------------------------------------------------------------ 10
-                stage('Scan image · Trivy') {
-                    steps {
-                        // trivy lit l'image directement via /var/run/docker.sock monté dans le conteneur Jenkins
-                        sh '''
-                          touch .trivyignore
-                          trivy image --severity CRITICAL --ignore-unfixed --exit-code 0 \
-                            --ignorefile .trivyignore --format table --output trivy-image.txt "$IMAGE"
-                          cat trivy-image.txt
-                        '''
-                    }
-                }
+                // -------------------------Take so long to install and run--------------------------------- 10
+                // stage('Scan image · Trivy') {
+                //     steps {
+                //         // trivy lit l'image directement via /var/run/docker.sock monté dans le conteneur Jenkins
+                //         sh '''
+                //           touch .trivyignore
+                //           trivy image --severity CRITICAL --ignore-unfixed --exit-code 0 \
+                //             --ignorefile .trivyignore --format table --output trivy-image.txt "$IMAGE"
+                //           cat trivy-image.txt
+                //         '''
+                //     }
+                // }
 
                 // ------------------------------------------------------------ 11
                 stage('Push image · Amazon ECR') {

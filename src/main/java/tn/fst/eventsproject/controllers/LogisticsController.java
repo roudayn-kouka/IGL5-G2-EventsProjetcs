@@ -5,7 +5,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
-import tn.fst.eventsproject.entities.Logistics;
+import tn.fst.eventsproject.dto.LogisticsDTO;
+import tn.fst.eventsproject.dto.Mapper;
 import tn.fst.eventsproject.services.ILogisticsService;
 
 import java.util.List;
@@ -21,14 +22,14 @@ public class LogisticsController {
     // POST /logistics
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public Logistics add(@RequestBody Logistics logistics) {
-        return logisticsService.addLogistics(logistics);
+    public LogisticsDTO add(@RequestBody LogisticsDTO logistics) {
+        return Mapper.toDto(logisticsService.addLogistics(Mapper.toEntity(logistics)));
     }
 
     // PUT /logistics
     @PutMapping
-    public Logistics update(@RequestBody Logistics logistics) {
-        return logisticsService.updateLogistics(logistics);
+    public LogisticsDTO update(@RequestBody LogisticsDTO logistics) {
+        return Mapper.toDto(logisticsService.updateLogistics(Mapper.toEntity(logistics)));
     }
 
     // DELETE /logistics/{id}
@@ -40,20 +41,20 @@ public class LogisticsController {
 
     // GET /logistics/{id}
     @GetMapping("/{id}")
-    public Logistics getById(@PathVariable("id") int idLog) {
-        return logisticsService.getLogisticsById(idLog);
+    public LogisticsDTO getById(@PathVariable("id") int idLog) {
+        return Mapper.toDto(logisticsService.getLogisticsById(idLog));
     }
 
     // GET /logistics
     @GetMapping
-    public List<Logistics> getAll() {
-        return logisticsService.getAllLogistics();
+    public List<LogisticsDTO> getAll() {
+        return Mapper.toLogisticsDtos(logisticsService.getAllLogistics());
     }
 
     // GET /logistics/reserved
     @GetMapping("/reserved")
-    public List<Logistics> getReserved() {
-        return logisticsService.getReservedLogistics();
+    public List<LogisticsDTO> getReserved() {
+        return Mapper.toLogisticsDtos(logisticsService.getReservedLogistics());
     }
 
     // GET /logistics/{id}/cout

@@ -2,7 +2,8 @@ package tn.fst.eventsproject.controllers;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
-import tn.fst.eventsproject.entities.Participant;
+import tn.fst.eventsproject.dto.Mapper;
+import tn.fst.eventsproject.dto.ParticipantDTO;
 import tn.fst.eventsproject.entities.Tache;
 import tn.fst.eventsproject.services.IParticipantServices;
 
@@ -16,30 +17,30 @@ public class ParticipantRestController {
     private final IParticipantServices participantServices;
 
     @PostMapping("/add")
-    public Participant addParticipant(@RequestBody Participant participant) {
-        return participantServices.addParticipant(participant);
+    public ParticipantDTO addParticipant(@RequestBody ParticipantDTO participant) {
+        return Mapper.toDto(participantServices.addParticipant(Mapper.toEntity(participant)));
     }
 
     @GetMapping("/all")
-    public List<Participant> getAllParticipants() {
-        return participantServices.getAllParticipants();
+    public List<ParticipantDTO> getAllParticipants() {
+        return Mapper.toParticipantDtos(participantServices.getAllParticipants());
     }
 
     @GetMapping("/{id}")
-    public Participant getParticipant(@PathVariable("id") int idPart) {
-        return participantServices.getParticipantById(idPart);
+    public ParticipantDTO getParticipant(@PathVariable("id") int idPart) {
+        return Mapper.toDto(participantServices.getParticipantById(idPart));
     }
 
     @PutMapping("/update/{id}")
-    public Participant updateParticipant(@PathVariable("id") int idPart,
-                                         @RequestBody Participant participant) {
-        return participantServices.updateParticipant(idPart, participant);
+    public ParticipantDTO updateParticipant(@PathVariable("id") int idPart,
+                                            @RequestBody ParticipantDTO participant) {
+        return Mapper.toDto(participantServices.updateParticipant(idPart, Mapper.toEntity(participant)));
     }
 
     @PutMapping("/{id}/tache/{tache}")
-    public Participant changeTache(@PathVariable("id") int idPart,
-                                   @PathVariable("tache") Tache tache) {
-        return participantServices.changeTache(idPart, tache);
+    public ParticipantDTO changeTache(@PathVariable("id") int idPart,
+                                      @PathVariable("tache") Tache tache) {
+        return Mapper.toDto(participantServices.changeTache(idPart, tache));
     }
 
     @DeleteMapping("/delete/{id}")

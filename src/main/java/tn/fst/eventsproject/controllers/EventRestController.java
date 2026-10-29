@@ -2,9 +2,10 @@ package tn.fst.eventsproject.controllers;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
-import tn.fst.eventsproject.entities.Event;
-import tn.fst.eventsproject.entities.Logistics;
-import tn.fst.eventsproject.entities.Participant;
+import tn.fst.eventsproject.dto.EventDTO;
+import tn.fst.eventsproject.dto.LogisticsDTO;
+import tn.fst.eventsproject.dto.Mapper;
+import tn.fst.eventsproject.dto.ParticipantDTO;
 import tn.fst.eventsproject.services.IEventServices;
 
 import java.time.LocalDate;
@@ -17,23 +18,23 @@ public class EventRestController {
     private final IEventServices eventServices;
 
     @PostMapping("/addPart")
-    public Participant addParticipant(@RequestBody Participant participant){
-        return eventServices.addParticipant(participant);
+    public ParticipantDTO addParticipant(@RequestBody ParticipantDTO participant){
+        return Mapper.toDto(eventServices.addParticipant(Mapper.toEntity(participant)));
     }
     @PostMapping("/addEvent/{id}")
-    public Event addEventPart(@RequestBody Event event, @PathVariable("id") int idPart){
-        return eventServices.addAffectEvenParticipant(event, idPart);
+    public EventDTO addEventPart(@RequestBody EventDTO event, @PathVariable("id") int idPart){
+        return Mapper.toDto(eventServices.addAffectEvenParticipant(Mapper.toEntity(event), idPart));
     }
     @PostMapping("/addEvent")
-    public Event addEvent(@RequestBody Event event){
-        return eventServices.addAffectEvenParticipant(event);
+    public EventDTO addEvent(@RequestBody EventDTO event){
+        return Mapper.toDto(eventServices.addAffectEvenParticipant(Mapper.toEntity(event)));
     }
     @PutMapping("/addAffectLog/{description}")
-    public Logistics addAffectLog(@RequestBody Logistics logistics,@PathVariable("description") String descriptionEvent){
-        return eventServices.addAffectLog(logistics,descriptionEvent);
+    public LogisticsDTO addAffectLog(@RequestBody LogisticsDTO logistics,@PathVariable("description") String descriptionEvent){
+        return Mapper.toDto(eventServices.addAffectLog(Mapper.toEntity(logistics),descriptionEvent));
     }
     @GetMapping("/getLogs/{d1}/{d2}")
-    public List<Logistics> getLogistiquesDates (@PathVariable("d1") LocalDate date_debut, @PathVariable("d2") LocalDate date_fin){
-        return eventServices.getLogisticsDates(date_debut,date_fin);
+    public List<LogisticsDTO> getLogistiquesDates (@PathVariable("d1") LocalDate date_debut, @PathVariable("d2") LocalDate date_fin){
+        return Mapper.toLogisticsDtos(eventServices.getLogisticsDates(date_debut,date_fin));
     }
 }
