@@ -68,7 +68,7 @@ pipeline {
                     env.IMAGE_TAG     = "${env.FEATURE_SLUG}-${env.BUILD_NUMBER}-${env.GIT_SHORT}"
                     env.IMAGE         = "${env.ECR_REGISTRY ?: 'registry.local'}/${env.APP_NAME}:${env.IMAGE_TAG}"
                     env.SONAR_KEY     = "fst-events-${env.FEATURE_SLUG}"
-                    env.APP_HOST      = "${env.ENV_NAME}.${env.APPS_DOMAIN ?: 'apps.local'}"
+                    env.APP_HOST      = "${env.ENV_NAME}.${env.APPS_DOMAIN ?: 'APPS_DOMAIN-non-defini'}"
 
                     currentBuild.displayName = "#${env.BUILD_NUMBER} · ${env.FEATURE_SLUG}"
                     currentBuild.description = "${env.OWNER} · ${env.GIT_SHORT} · ${env.K8S_NAMESPACE}"
@@ -83,7 +83,17 @@ pipeline {
                     │ Environnement  : ${env.K8S_NAMESPACE}  (profil ${env.HELM_PROFILE})
                     │ URL            : http://${env.APP_HOST}/events/
                     │ Gate sécurité  : ${env.SECURITY_GATE}
+                    │ GitOps         : ${env.PLATFORM_REPO}@${env.GITOPS_BRANCH} · Argo CD ${env.ARGOCD_SERVER ?: '(non défini)'}
                     └──────────────────────────────────────────────────────────"""
+                }
+                // Prérequis du déploiement vérifiés AVANT le build : échec en quelques secondes
+                // (paramètre vide, AWS/ECR, réseau, TLS, jeton, branche lue par Argo CD).
+                script {
+                    if (env.DEPLOY == 'true') {
+                        withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
+                            sh 'bash ci/deploy-preflight.sh'
+                        }
+                    }
                 }
             }
         }
@@ -243,53 +253,8 @@ pipeline {
                                                   usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
                     // Jenkins ne déploie pas : il décrit l'état voulu sur la branche gitops.
                     // L'ApplicationSet Argo CD crée automatiquement l'environnement s'il est nouveau.
-                    sh '''
-                      rm -rf gitops-work
-                      AUTH_HEADER="AUTHORIZATION: basic $(printf '%s' "$GIT_USER:$GIT_TOKEN" | base64 | tr -d '\n')"
-                      git -c http.extraheader="$AUTH_HEADER" \
-                        clone --branch "$GITOPS_BRANCH" --depth 20 "https://github.com/$PLATFORM_REPO.git" gitops-work
-                      trap 'cd "$WORKSPACE"; rm -rf gitops-work' EXIT
-                      git -C gitops-work config http.extraheader "$AUTH_HEADER"
-                      unset AUTH_HEADER
-                      ENV_DIR="gitops-work/envs/$ENV_NAME"
-                      mkdir -p "$ENV_DIR"
-
-                      cat > "$ENV_DIR/config.json" <<EOF
-{ "namespace": "$K8S_NAMESPACE", "profile": "$HELM_PROFILE", "owner": "$OWNER_SLUG" }
-EOF
-                      cat > "$ENV_DIR/values.yaml" <<EOF
-# Généré par Jenkins — build #$BUILD_NUMBER — commit $GIT_SHORT — ne pas modifier à la main
-feature: $FEATURE_SLUG
-owner: $OWNER_SLUG
-image:
-  repository: $ECR_REGISTRY/$APP_NAME
-  tag: $IMAGE_TAG
-ingress:
-  host: $APP_HOST
-EOF
-                      cd gitops-work
-                      git config user.name  "Jenkins FST"
-                      git config user.email "jenkins@fst-events.local"
-                      git add "envs/$ENV_NAME"
-                      git diff --cached --quiet || git commit -m "deploy($ENV_NAME): $IMAGE_TAG [build #$BUILD_NUMBER · $OWNER]"
-
-                      # Plusieurs membres peuvent promouvoir en même temps : rebase puis nouvel essai
-                      PUSHED=false
-                      for i in 1 2 3 4 5; do
-                        if git push origin "HEAD:$GITOPS_BRANCH"; then
-                          PUSHED=true
-                          break
-                        fi
-                        if [ "$i" -lt 5 ]; then
-                          git pull --rebase origin "$GITOPS_BRANCH"
-                        fi
-                      done
-                      if [ "$PUSHED" != true ]; then
-                        echo "Échec du push GitOps après cinq tentatives."
-                        exit 1
-                      fi
-                      git rev-parse HEAD > ../gitops-revision.txt
-                    '''
+                    // Produit gitops-revision.txt (commit vérifié sur origin) et gitops-image.txt.
+                    sh 'bash ci/gitops-promote.sh'
                 }
             }
         }
@@ -298,28 +263,13 @@ EOF
         stage('Synchronisation Argo CD') {
             when { expression { env.DEPLOY == 'true' } }
             steps {
-                withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
-                    // On attend qu'Argo CD ait appliqué EXACTEMENT notre révision et que l'appli soit saine
-                    sh '''
-                      APP="events-$ENV_NAME"
-                      WANTED=$(cat gitops-revision.txt)
-                      for i in $(seq 1 60); do
-                        J=$(argocd app get "$APP" --refresh -o json 2>/dev/null || true)
-                        REV=$(echo "$J" | jq -r '(.status.sync.revisions // []) | join(",")')
-                        REV_MATCH=$(echo "$J" | jq -r --arg wanted "$WANTED" '(.status.sync.revisions // []) | index($wanted) != null')
-                        SYNC=$(echo "$J" | jq -r '.status.sync.status // empty')
-                        HEALTH=$(echo "$J" | jq -r '.status.health.status // empty')
-                        echo "[$i] $APP révisions=$REV commit-attendu=$REV_MATCH sync=$SYNC santé=$HEALTH"
-                        if [ "$REV_MATCH" = "true" ] && [ "$SYNC" = "Synced" ] && [ "$HEALTH" = "Healthy" ]; then
-                          echo "Déployé et sain."; exit 0
-                        fi
-                        if [ "$REV_MATCH" = "true" ] && [ "$HEALTH" = "Degraded" ]; then
-                          echo "Déploiement dégradé : voir l'interface Argo CD."; exit 1
-                        fi
-                        sleep 10
-                      done
-                      echo "Délai dépassé (10 min)."; exit 1
-                    '''
+                withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN'),
+                                 usernamePassword(credentialsId: 'github-credentials',
+                                                  usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                    // Révision de la source « values » == commit de l'étape 12 (ou descendant où
+                    // envs/<env> est inchangé), image attendue présente, Synced + Healthy.
+                    // Aucune erreur du CLI n'est masquée (réseau, TLS, jeton, droits, JSON).
+                    sh 'bash ci/argocd-wait.sh'
                 }
             }
         }
@@ -330,27 +280,9 @@ EOF
             parallel {
                 stage('Smoke tests') {
                     steps {
-                        sh '''
-                          BASE="http://$APP_HOST/events"
-                          HEALTH=$(curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "$BASE/actuator/health/readiness")
-                          echo "$HEALTH"
-                          echo "$HEALTH" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"' || {
-                            echo "Readiness Actuator n'est pas UP."; exit 1;
-                          }
-                          curl -fsS --retry 10 --retry-delay 6 --retry-all-errors -o /dev/null "$BASE/actuator/prometheus"
-                          echo "Endpoint Prometheus disponible."
-
-                          for endpoint in "$BASE/event-stats/summary" "$BASE/event/"; do
-                            STATUS=$(curl -sS -o /dev/null -w '%{http_code}' "$endpoint" || true)
-                            if [ "$STATUS" = "404" ]; then
-                              echo "AVERTISSEMENT : endpoint métier absent sur cette feature : $endpoint"
-                            elif [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
-                              echo "Endpoint métier disponible : $endpoint (HTTP $STATUS)"
-                            else
-                              echo "AVERTISSEMENT : endpoint métier $endpoint retourne HTTP $STATUS"
-                            fi
-                          done
-                        '''
+                        // Codes HTTP exacts, redirections non suivies, erreurs DNS/connexion explicites ;
+                        // API métier obligatoire sur staging/prod, 404 toléré sur une feature.
+                        sh 'bash ci/smoke-tests.sh'
                     }
                 }
                 stage('DAST · OWASP ZAP') {

@@ -15,6 +15,9 @@ spec:
   goTemplate: true
   goTemplateOptions: ["missingkey=error"]
   generators:
+    # Les environnements et leurs valeurs viennent de la branche où Jenkins pousse (étape 12,
+    # GITOPS_BRANCH = gitops). Ne jamais mettre main ici : Jenkins ne pousse pas sur main
+    # (anti-boucle) et la révision attendue par l'étape 13 ne serait jamais appliquée.
     - git:
         repoURL: https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git
         revision: gitops
@@ -35,6 +38,8 @@ spec:
         notifications.argoproj.io/subscribe.on-health-degraded.slack: igl5-g2-deploiements
     spec:
       project: events
+      # Deux sources : le chart suit le code (main), les valeurs suivent les promotions
+      # (gitops). .status.sync.revisions suit cet ordre ; Jenkins compare la source « values ».
       sources:
         - repoURL: https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git
           targetRevision: main

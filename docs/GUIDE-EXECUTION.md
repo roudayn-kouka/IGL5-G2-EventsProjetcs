@@ -338,6 +338,58 @@ kubectl get namespace events-<nom-feature>   # disparaît une fois la suppressio
 
 Ne supprimez jamais `envs/staging` ni `envs/prod`. Pour annuler une suppression, `git revert` du commit sur `gitops` recrée l'environnement.
 
+## 8 bis. Build en un clic : prérequis, vérification et diagnostic
+
+Une fois les prérequis ci-dessous réunis, **Build Now** sur une branche suffit : aucune action manuelle entre les étapes (pas de `kubectl`, pas de synchronisation Argo CD à la main, pas de modification de manifest).
+
+| Branche (job Multibranch `events-project`) | Environnement | Particularité |
+|---|---|---|
+| `feature/<nom>` | `events-<nom>` | Créé automatiquement par l'ApplicationSet |
+| `develop`, `release/*`, `hotfix/*` | `events-staging` | — |
+| `main` | `events-prod` | Approbation manuelle (étape 11) |
+
+### Où tourne Jenkins
+
+Jenkins tourne en conteneur Docker sur l'EC2 **`fst-events-devops`** (Docker Compose, configuré par Ansible), dans le **même VPC** que le cluster EKS. Il n'utilise pas ECS. L'API Argo CD est exposée par un **NLB interne** (`loadBalancerSourceRanges` = CIDR du VPC) : elle n'est joignable que depuis le VPC, ce qui est le cas de l'EC2. Jenkins n'a aucun accès `kubectl` au cluster; il ne parle qu'à ECR (rôle de l'instance), GitHub et l'API Argo CD (compte `jenkins`, droits `get`/`sync` sur `events/*`).
+
+### Prérequis, à faire une fois
+
+1. **Branche `gitops` publiée et lue par Argo CD.** L'ApplicationSet (`platform/gitops/platform/apps/40-events-environments.yaml`) lit `envs/*/config.json` et la source `ref: values` sur **`gitops`**, la branche où Jenkins pousse. Ne jamais la remplacer par `main` : la révision poussée par Jenkins ne serait jamais appliquée (et pousser sur `main` relancerait un build à chaque promotion).
+2. **Adresses des load balancers** : `make post-apply` écrit `argocd_server` (NLB interne Argo CD, port 80) et `apps_domain` (`<IP du NLB ingress>.sslip.io`) dans `ansible/group_vars/devops/runtime.yml`, et un commit local des hôtes staging/prod sur `gitops` à publier (`git push origin gitops`).
+3. **Jeton Argo CD du compte `jenkins`** (aucun jeton n'existe tant qu'il n'est pas généré) :
+
+   ```bash
+   make argocd-ui                       # terminal 1 : port-forward localhost:8080
+   argocd login localhost:8080 --username admin --grpc-web --plaintext   # mot de passe : secret argocd-initial-admin-secret
+   argocd account generate-token --account jenkins --server localhost:8080 --grpc-web --plaintext
+   ```
+
+   Copier la valeur dans `vault_argocd_token` (`ansible-vault edit ansible/group_vars/devops/vault.yml`), sans l'afficher ailleurs.
+4. **Reconfigurer Jenkins** : `make configure`. Vérifier avant que l'inventaire et `group_vars/devops/terraform.yml` contiennent les vraies valeurs (IP de l'EC2, registre ECR, région) et non les valeurs d'exemple (`203.0.113.10`, `000000000000`) : ils sont régénérés par `terraform apply`. Ansible réécrit la configuration JCasC (`ARGOCD_SERVER`, `APPS_DOMAIN`, `GITOPS_BRANCH`) et le credential `argocd-token`.
+5. **Credentials Jenkins** (créés par JCasC à partir du Vault) : `github-credentials` (push sur `gitops`), `argocd-token`, `sonar-token`, `nexus-credentials`. AWS/ECR : rôle de l'instance (`LabInstanceProfile` sur AWS Academy), aucune clé stockée.
+
+### Ce que vérifie le pipeline
+
+- **Étape 1** (`ci/deploy-preflight.sh`, si déploiement) : variables non vides et cohérentes (registre ECR dans la bonne région, `GITOPS_BRANCH` jamais une branche construite, `APPS_DOMAIN` résolvable), outils présents, identité AWS et dépôt ECR, connexion Argo CD avec le jeton (`account get-user-info`), et branche réellement lue par Argo CD. Un prérequis manquant échoue en quelques secondes avec la cause.
+- **Étape 12** (`ci/gitops-promote.sh`) : écrit `envs/<env>/`, pas de commit vide, repousse en régénérant les fichiers si la branche a avancé, vérifie que le SHA enregistré est sur `origin/gitops`; produit `gitops-revision.txt` et `gitops-image.txt`.
+- **Étape 13** (`ci/argocd-wait.sh`) : compare la révision de la **source `values`** (Application multi-source : la source chart suit `main`) au SHA poussé, accepte un commit plus récent seulement si `envs/<env>` n'a pas changé, exige l'image du build dans l'Application, `Synced` et `Healthy`. Réglages : `ARGOCD_WAIT_SECONDS` (600), `ARGOCD_POLL_SECONDS` (10), `ARGOCD_APP_CREATE_SECONDS` (180), `ARGOCD_DEGRADED_GRACE_SECONDS` (90).
+- **Étape 14** (`ci/smoke-tests.sh`) : `http://<env>.<APPS_DOMAIN>/events` — readiness `UP`, Prometheus, tableau de bord HTML, API JSON (obligatoire sur staging/prod, 404 toléré sur une feature); code HTTP exact, redirections non suivies.
+
+### Diagnostic des échecs
+
+| Message dans la console Jenkins | Cause | Correction |
+|---|---|---|
+| `PRÉREQUIS MANQUANT : ARGOCD_SERVER est vide` / `erreur CONFIGURATION … server address unspecified` | `runtime.yml` absent lors de `make configure` | Prérequis 2 puis 4 |
+| `Credential Jenkins « argocd-token » vide` / `erreur AUTHENTIFICATION` | Jeton absent, expiré ou révoqué | Prérequis 3 puis 4 |
+| `erreur AUTORISATION` | `policy.csv` sans `get`/`sync` pour `jenkins` | `terraform/values/argocd.yaml.tftpl` |
+| `erreur DNS` / `erreur RÉSEAU` | Jenkins hors du VPC ou NLB filtré | Vérifier VPC, groupe de sécurité, `loadBalancerSourceRanges` |
+| `lit les valeurs sur …@main, mais Jenkins pousse sur …@gitops` | ApplicationSet modifié | Remettre `gitops` (prérequis 1) |
+| `Application events-<env> toujours absente` | `envs/<env>/config.json` absent sur `gitops` ou ApplicationSet en erreur | `kubectl -n argocd get applicationset events-environments -o yaml` |
+| `Révision appliquée et saine, mais l'image … n'est pas déployée` | Valeurs non prises en compte par le chart | Comparer `envs/<env>/values.yaml` et le chart |
+| `DNS : le nom de http://… ne se résout pas` (étape 14) | `APPS_DOMAIN` vide ou faux | Prérequis 2 puis 4 |
+
+Tests des scripts, sans cluster ni AWS : `bash ci/tests/test-deploy-preflight.sh`, `bash ci/tests/test-gitops-promote.sh`, `bash ci/tests/test-argocd-wait.sh`.
+
 ## 9. Contrôles locaux sans action AWS
 
 Depuis le dépôt unique, les commandes d'infrastructure s'exécutent depuis `platform/` :

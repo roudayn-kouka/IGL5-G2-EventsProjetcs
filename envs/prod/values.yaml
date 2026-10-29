@@ -1,0 +1,10 @@
+# Mis à jour par Jenkins après approbation manuelle
+feature: prod
+owner: equipe-igl5-g2
+
+image:
+  repository: 315488743028.dkr.ecr.us-east-1.amazonaws.com/events-app
+  tag: staging-6-0de6685
+
+ingress:
+  host: prod.ade1d941725be4926bc7d211524a8863-409df5483e5e5829.elb.us-east-1.amazonaws.com
