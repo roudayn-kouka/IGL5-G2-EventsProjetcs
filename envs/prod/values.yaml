@@ -1,0 +1,8 @@
+# Mis à jour par Jenkins après APPROBATION manuelle d'un build de main
+feature: prod
+owner: equipe-igl5-g2
+image:
+  repository: 000000000000.dkr.ecr.eu-west-3.amazonaws.com/events-app
+  tag: prod-0-initial
+ingress:
+  host: prod.<IP-du-NLB>.sslip.io

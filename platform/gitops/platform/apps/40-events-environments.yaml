@@ -17,7 +17,7 @@ spec:
   generators:
     - git:
         repoURL: https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git
-        revision: gitops
+        revision: main
         files:
           - path: "envs/*/config.json"
   template:
@@ -44,7 +44,7 @@ spec:
               - 'values-{{.profile}}.yaml'
               - '$values/envs/{{.path.basename}}/values.yaml'
         - repoURL: https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git
-          targetRevision: gitops
+          targetRevision: main
           ref: values
       destination:
         server: https://kubernetes.default.svc
