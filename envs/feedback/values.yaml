@@ -1,0 +1,8 @@
+# Généré par Jenkins — build #12 — commit 104b0ca — ne pas modifier à la main
+feature: feedback
+owner: emna-ouarteni
+image:
+  repository: 471112616916.dkr.ecr.us-east-1.amazonaws.com/events-app
+  tag: feedback-12-104b0ca
+ingress:
+  host: feedback.44.218.144.91.sslip.io

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: events-app
+  labels:
+    {{- include "events.labels" . | nindent 4 }}
+    {{- include "events.appSelector" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "events.appSelector" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.app.port }}
+      targetPort: http
