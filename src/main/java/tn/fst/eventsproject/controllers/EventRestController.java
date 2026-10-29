@@ -34,7 +34,7 @@ public class EventRestController {
         return Mapper.toDto(eventServices.addAffectLog(Mapper.toEntity(logistics),descriptionEvent));
     }
     @GetMapping("/getLogs/{d1}/{d2}")
-    public List<LogisticsDTO> getLogistiquesDates (@PathVariable("d1") LocalDate date_debut, @PathVariable("d2") LocalDate date_fin){
-        return Mapper.toLogisticsDtos(eventServices.getLogisticsDates(date_debut,date_fin));
+    public List<LogisticsDTO> getLogistiquesDates (@PathVariable("d1") LocalDate dateDebut, @PathVariable("d2") LocalDate dateFin){
+        return Mapper.toLogisticsDtos(eventServices.getLogisticsDates(dateDebut, dateFin));
     }
 }
