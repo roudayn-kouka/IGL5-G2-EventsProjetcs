@@ -61,3 +61,6 @@ gitleaks-report.json
 *.tfvars
 tfplan
 tfplan.txt
+
+kind-ci.yaml
+.kubeconfig

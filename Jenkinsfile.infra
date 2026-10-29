@@ -1,0 +1,118 @@
+// Job infra : Terraform installe Prometheus + Grafana sur le cluster kind.
+// ACTION = plan-only (defaut, ne change rien) | apply | destroy
+
+def withKube(Closure body) {
+  withCredentials([file(credentialsId: 'kubeconfig-kind', variable: 'KUBECONFIG_FILE')]) {
+    sh 'cp "$KUBECONFIG_FILE" "$WORKSPACE/$TF_DIR/.kubeconfig"'
+    try { body() }
+    finally { sh 'rm -f "$WORKSPACE/$TF_DIR/.kubeconfig"' }
+  }
+}
+
+pipeline {
+  agent any
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '10'))
+    timeout(time: 45, unit: 'MINUTES')
+  }
+
+  parameters {
+    choice(name: 'ACTION', choices: ['plan-only', 'apply', 'destroy'],
+           description: 'plan-only = rien ne change | apply = installe Prometheus + Grafana | destroy = les supprime')
+  }
+
+  environment {
+    TF_IMAGE  = 'hashicorp/terraform:1.9.8'
+    TRIVY_IMG = 'aquasec/trivy:0.56.2'
+    TF_DIR    = 'infra/terraform'
+    // Le state vit dans un volume Docker nomme : il survit au nettoyage du workspace
+    TF = 'docker run --rm -v $WORKSPACE/$TF_DIR:/tf -v tfstate:/state -w /tf --add-host host.docker.internal:host-gateway -e TF_IN_AUTOMATION=true -e TF_VAR_kubeconfig_path=/tf/.kubeconfig hashicorp/terraform:1.9.8'
+  }
+
+  stages {
+
+    stage('Terraform setup') {
+      steps {
+        sh '''
+          set -e
+          $TF fmt -check -recursive
+          $TF init -input=false -reconfigure -backend-config="path=/state/events-monitoring.tfstate"
+          $TF validate
+          docker run --rm -v "$WORKSPACE/$TF_DIR:/src" $TRIVY_IMG config \
+            --severity HIGH,CRITICAL --exit-code 0 --format table /src | tee trivy-iac.txt
+        '''
+      }
+    }
+
+    stage('Terraform plan') {
+      when { expression { params.ACTION in ['plan-only', 'apply'] } }
+      steps {
+        script {
+          withKube {
+            sh '''
+              set -e
+              $TF plan -input=false -out=tfplan
+              $TF show -no-color tfplan > "$WORKSPACE/tfplan.txt"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Approbation : installer le monitoring') {
+      when { expression { params.ACTION == 'apply' } }
+      steps {
+        timeout(time: 30, unit: 'MINUTES') {
+          input message: 'Installer Prometheus + Grafana ? (lis tfplan.txt dans les artefacts)', ok: 'Installer'
+        }
+      }
+    }
+
+    stage('Terraform apply') {
+      when { expression { params.ACTION == 'apply' } }
+      steps {
+        script {
+          withKube {
+            sh '$TF apply -input=false tfplan'
+          }
+        }
+        echo """Monitoring installe.
+- Mot de passe Grafana : kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}'  (base64)
+- Grafana    : kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80  -> http://localhost:3000 (user admin)
+- Prometheus : kubectl -n monitoring port-forward svc/monitoring-kube-prometheus-prometheus 9090:9090"""
+      }
+    }
+
+    stage('Approbation : detruire le monitoring') {
+      when { expression { params.ACTION == 'destroy' } }
+      steps {
+        timeout(time: 30, unit: 'MINUTES') {
+          input message: 'Supprimer Prometheus + Grafana ?', ok: 'Detruire'
+        }
+      }
+    }
+
+    stage('Terraform destroy') {
+      when { expression { params.ACTION == 'destroy' } }
+      steps {
+        script {
+          withKube {
+            sh '$TF destroy -input=false -auto-approve'
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      archiveArtifacts artifacts: 'tfplan.txt, trivy-iac.txt', allowEmptyArchive: true
+      // Terraform tourne en root : on rend les fichiers a Jenkins pour que le nettoyage fonctionne
+      sh 'docker run --rm -v "$WORKSPACE:/w" alpine chown -R $(id -u):$(id -g) /w || true'
+      sh 'rm -f $WORKSPACE/$TF_DIR/.kubeconfig $WORKSPACE/$TF_DIR/tfplan || true'
+    }
+  }
+}
