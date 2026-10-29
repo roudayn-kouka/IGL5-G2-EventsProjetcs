@@ -179,14 +179,26 @@ pipeline {
                 }
 
                 // ------------------------------------------------------------ 8
+                                // ------------------------------------------------------------ 8
                 stage('Publication JAR · Nexus') {
                     steps {
                         withCredentials([usernamePassword(credentialsId: 'nexus-credentials',
                                                           usernameVariable: 'NEXUS_USR', passwordVariable: 'NEXUS_PSW')]) {
+                            // 1. SNAPSHOT : version de travail de la branche
                             sh """
                               ${MVN} -s ci/maven-settings.xml deploy -DskipTests -Dskip.npm -Dskip.installnodenpm \
                                 -DaltDeploymentRepository=nexus::default::${env.NEXUS_URL}/repository/maven-snapshots/
                             """
+                            // 2. RELEASE :
+                            sh '''
+                              JAR=$(find target -maxdepth 1 -type f -name '*.jar' ! -name '*.jar.original' | head -n1)
+                              REL="1.0.0-$FEATURE_SLUG.$BUILD_NUMBER"
+                              sh ./mvnw -B -ntp -s ci/maven-settings.xml deploy:deploy-file \
+                                -Dfile="$JAR" -DgroupId=tn.fst -DartifactId=eventsProject -Dversion="$REL" \
+                                -Dpackaging=jar -DgeneratePom=true -DrepositoryId=nexus \
+                                -Durl="$NEXUS_URL/repository/maven-releases/"
+                              echo "Release publiée : tn.fst:eventsProject:$REL"
+                            '''
                         }
                     }
                 }
