@@ -123,14 +123,21 @@ pipeline {
                 '''
             }
         }
-        stage('Dépendances & IaC · Trivy FS') {
+        stage('Scan image · Trivy') {
+            when { expression { env.DEPLOY == 'true' } }
             steps {
-                sh '''
-                docker run --rm --volumes-from jenkins -v trivy-cache:/root/.cache $TRIVY_IMAGE fs \
-                    --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 0 \
-                    --format table --output "$WORKSPACE/trivy-fs.txt" "$WORKSPACE"
-                cat trivy-fs.txt
-                '''
+                script {
+                    def exitCode = (env.SECURITY_GATE == 'strict') ? '1' : '0'
+                    sh """
+                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                        --volumes-from jenkins -v trivy-cache:/root/.cache ${TRIVY_IMAGE} image \
+                        --skip-db-update --skip-java-db-update \
+                        --severity CRITICAL --ignore-unfixed --exit-code ${exitCode} \
+                        --ignorefile "\$WORKSPACE/.trivyignore" \
+                        --format table --output "\$WORKSPACE/trivy-image.txt" ${IMAGE}
+                    """
+                    sh 'cat trivy-image.txt'
+                }
             }
         }
             }
