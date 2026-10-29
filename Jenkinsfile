@@ -39,7 +39,7 @@ pipeline {
         SONAR_PLUGIN   = 'org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922'
         MVN            = 'mvn -B -ntp'
         ARGOCD_OPTS    = '--grpc-web --plaintext'
-        DOCKERHUB_REPO = 'yourdockerhubuser/events-app'   // <-- À ADAPTER
+        DOCKERHUB_REPO = 'nour1mustapha/events-app'   // <-- À ADAPTER
         MAIL_TO        = 'your-team@example.com'          // <-- À ADAPTER
     }
 
