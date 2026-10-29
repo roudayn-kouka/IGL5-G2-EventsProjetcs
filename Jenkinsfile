@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 //  Events Project - FST - IGL5 G2 - Pipeline CI/CD/DevSecOps (GitOps)
 //
 //  UN SEUL Jenkinsfile pour TOUTES les branches (job Jenkins Multibranch Pipeline).
@@ -88,6 +88,7 @@ pipeline {
                     env.SONAR_KEY     = "fst-events-${env.FEATURE_SLUG}"
                     
                     env.APP_HOST      = "${env.ENV_NAME}.${env.APPS_DOMAIN ?: 'apps.local'}"
+                    env.BASE_URL = "${env.SMOKE_BASE_URL ?: 'http://host.docker.internal:8083'}/events"
 
                     currentBuild.displayName = "#${env.BUILD_NUMBER} - ${env.FEATURE_SLUG}"
                     currentBuild.description = "${env.OWNER} - ${env.GIT_SHORT} - ${env.K8S_NAMESPACE}"
@@ -411,7 +412,7 @@ EOF
                 stage('Smoke tests') {
                     steps {
                         sh '''
-                          BASE="http://$APP_HOST/events"
+                          BASE="$BASE_URL"
                           HEALTH=$(curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "$BASE/actuator/health/readiness")
                           echo "$HEALTH"
                           echo "$HEALTH" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"' || {
@@ -438,7 +439,14 @@ EOF
                     steps {
                         script {
                             def tolerate = (env.SECURITY_GATE == 'strict') ? '' : ' || true'
-                            sh "docker run --rm ${ZAP_IMAGE} zap-baseline.py -t http://${env.APP_HOST}/events/ -I -m 2${tolerate}"
+                            sh """
+                            mkdir -p zap-out && chmod 777 zap-out
+                            docker run --rm --add-host host.docker.internal:host-gateway \\
+                                -v "\$WORKSPACE/zap-out:/zap/wrk:rw" ${ZAP_IMAGE} \\
+                                zap-baseline.py -t ${env.BASE_URL}/ -I -m 2 \\
+                                -J zap_out.json -r zap_report.html${tolerate}
+                            test -s zap-out/zap_out.json
+                            """
                         }
                     }
                 }
