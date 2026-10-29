@@ -221,7 +221,8 @@ pipeline {
                             string(credentialsId: 'aws-session-token',     variable: 'AWS_SESSION_TOKEN')
                         ]) {
                             sh '''
-                            aws ecr get-login-password --region "$AWS_REGION" \
+                            docker run --rm -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
+                                amazon/aws-cli ecr get-login-password --region "$AWS_REGION" \
                                 | docker login --username AWS --password-stdin "$ECR_REGISTRY"
                             docker push "$IMAGE"
                             docker logout "$ECR_REGISTRY"
