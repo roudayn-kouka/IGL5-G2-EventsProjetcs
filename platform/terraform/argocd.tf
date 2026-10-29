@@ -6,7 +6,7 @@
 
 resource "kubernetes_namespace" "monitoring" {
   metadata { name = "monitoring" }
-  depends_on = [module.eks]
+  depends_on = [module.eks, aws_eks_node_group.lab]
 }
 
 # Secrets consommés par la plateforme (jamais commités dans Git)
@@ -49,7 +49,7 @@ resource "helm_release" "argocd" {
     vpc_cidr          = module.vpc.vpc_cidr_block
   })]
 
-  depends_on = [module.eks]
+  depends_on = [module.eks, aws_eks_node_group.lab]
 }
 
 # Application racine : Argo CD se gère lui-même à partir de platform/gitops/platform/apps sur main.

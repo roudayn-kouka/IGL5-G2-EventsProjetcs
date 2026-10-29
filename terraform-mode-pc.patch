@@ -1,0 +1,341 @@
+--- a/platform/terraform/variables.tf
++++ b/platform/terraform/variables.tf
+@@ -74,3 +74,28 @@
+   type        = string
+   default     = ""
+ }
++
++# --- Mode « Jenkins sur un PC » (Learner Lab) : les valeurs par défaut gardent le comportement d'équipe ---
++variable "create_devops_ec2" {
++  description = "false = pas d'EC2 « usine DevOps » (Jenkins, Nexus, SonarQube tournent ailleurs, ex. Docker sur un PC)"
++  type        = bool
++  default     = true
++}
++
++variable "argocd_public" {
++  description = "true = le NLB d'Argo CD est public, restreint à admin_cidr (Jenkins hors du VPC) ; false = NLB interne au VPC"
++  type        = bool
++  default     = false
++}
++
++variable "appset_only_env" {
++  description = "Vide = tous les dossiers envs/ de la branche gitops. Sinon un seul environnement (ex. participant) : l'ApplicationSet n'est pas géré par l'application racine, Jenkins l'applique filtré."
++  type        = string
++  default     = ""
++}
++
++variable "eks_raw" {
++  description = "true = cluster EKS en ressources simples (aws_eks_cluster) au lieu du module communautaire. Nécessaire sur certains Learner Lab : le module lit iam:GetRole sur le rôle de la session (voclabs), refusé par une politique explicite. Exige lab_role_arn."
++  type        = bool
++  default     = false
++}
+--- a/platform/terraform/devops-ec2.tf
++++ b/platform/terraform/devops-ec2.tf
+@@ -2,6 +2,7 @@
+ #  EC2 « usine DevOps » : Jenkins, Nexus, SonarQube (configurée ensuite par Ansible)
+ # =============================================================================
+ data "aws_ami" "ubuntu" {
++  count       = var.create_devops_ec2 ? 1 : 0
+   most_recent = true
+   owners      = ["099720109477"] # Canonical
+   filter {
+@@ -11,11 +12,13 @@
+ }
+ 
+ resource "aws_key_pair" "devops" {
++  count      = var.create_devops_ec2 ? 1 : 0
+   key_name   = "${var.project}-devops"
+   public_key = file(pathexpand(var.ssh_public_key_path))
+ }
+ 
+ resource "aws_security_group" "devops" {
++  count       = var.create_devops_ec2 ? 1 : 0
+   name        = "${var.project}-devops"
+   description = "Usine DevOps : HTTPS public (Caddy), SSH restreint"
+   vpc_id      = module.vpc.vpc_id
+@@ -73,7 +76,7 @@
+ 
+ # Rôle IAM de l'instance : Jenkins pousse dans ECR sans aucune clé AWS stockée
+ resource "aws_iam_role" "devops" {
+-  count = local.use_lab_role ? 0 : 1
++  count = (local.use_lab_role || !var.create_devops_ec2) ? 0 : 1
+   name  = "${var.project}-devops"
+   assume_role_policy = jsonencode({
+     Version   = "2012-10-17"
+@@ -82,7 +85,7 @@
+ }
+ 
+ resource "aws_iam_role_policy" "devops_ecr" {
+-  count = local.use_lab_role ? 0 : 1
++  count = (local.use_lab_role || !var.create_devops_ec2) ? 0 : 1
+   name  = "ecr-push"
+   role  = aws_iam_role.devops[0].id
+   policy = jsonencode({
+@@ -100,17 +103,18 @@
+ }
+ 
+ resource "aws_iam_instance_profile" "devops" {
+-  count = local.use_lab_role ? 0 : 1
++  count = (local.use_lab_role || !var.create_devops_ec2) ? 0 : 1
+   name  = "${var.project}-devops"
+   role  = aws_iam_role.devops[0].name
+ }
+ 
+ resource "aws_instance" "devops" {
+-  ami                    = data.aws_ami.ubuntu.id
++  count                  = var.create_devops_ec2 ? 1 : 0
++  ami                    = data.aws_ami.ubuntu[0].id
+   instance_type          = var.devops_instance_type
+   subnet_id              = module.vpc.public_subnets[0]
+-  vpc_security_group_ids = [aws_security_group.devops.id]
+-  key_name               = aws_key_pair.devops.key_name
++  vpc_security_group_ids = [aws_security_group.devops[0].id]
++  key_name               = aws_key_pair.devops[0].key_name
+   iam_instance_profile   = local.use_lab_role ? "LabInstanceProfile" : aws_iam_instance_profile.devops[0].name
+ 
+   root_block_device {
+@@ -128,7 +132,8 @@
+ }
+ 
+ resource "aws_eip" "devops" {
+-  instance = aws_instance.devops.id
++  count    = var.create_devops_ec2 ? 1 : 0
++  instance = aws_instance.devops[0].id
+   domain   = "vpc"
+   tags     = { Name = "${var.project}-devops" }
+ }
+--- a/platform/terraform/ansible-handoff.tf
++++ b/platform/terraform/ansible-handoff.tf
+@@ -2,20 +2,22 @@
+ #  Passage de relais Terraform -> Ansible : inventaire + variables générés
+ # =============================================================================
+ resource "local_file" "ansible_inventory" {
++  count           = var.create_devops_ec2 ? 1 : 0
+   filename        = "${path.module}/../ansible/inventory/hosts.ini"
+   file_permission = "0644"
+   content = templatefile("${path.module}/templates/hosts.ini.tftpl", {
+-    devops_ip = aws_eip.devops.public_ip
++    devops_ip = aws_eip.devops[0].public_ip
+   })
+ }
+ 
+ resource "local_file" "ansible_tf_vars" {
++  count           = var.create_devops_ec2 ? 1 : 0
+   filename        = "${path.module}/../ansible/group_vars/devops/terraform.yml"
+   file_permission = "0644"
+   content = templatefile("${path.module}/templates/terraform.yml.tftpl", {
+     aws_region   = var.region
+     ecr_registry = split("/", aws_ecr_repository.events_app.repository_url)[0]
+-    cluster_name = module.eks.cluster_name
+-    devops_ip    = aws_eip.devops.public_ip
++    cluster_name = local.eks_cluster_name
++    devops_ip    = aws_eip.devops[0].public_ip
+   })
+ }
+--- a/platform/terraform/argocd.tf
++++ b/platform/terraform/argocd.tf
+@@ -6,7 +6,7 @@
+ 
+ resource "kubernetes_namespace" "monitoring" {
+   metadata { name = "monitoring" }
+-  depends_on = [module.eks]
++  depends_on = [module.eks, aws_eks_node_group.lab]
+ }
+ 
+ # Secrets consommés par la plateforme (jamais commités dans Git)
+@@ -43,11 +43,13 @@
+     platform_repo_url = var.platform_repo_url
+     github_token      = var.github_token
+     slack_bot_token   = var.slack_bot_token
+-    devops_cidr       = "${aws_eip.devops.public_ip}/32"
++    devops_cidr       = var.create_devops_ec2 ? "${aws_eip.devops[0].public_ip}/32" : ""
++    argocd_public     = var.argocd_public
++    admin_cidr        = var.admin_cidr
+     vpc_cidr          = module.vpc.vpc_cidr_block
+   })]
+ 
+-  depends_on = [module.eks]
++  depends_on = [module.eks, aws_eks_node_group.lab]
+ }
+ 
+ # Application racine : Argo CD se gère lui-même à partir de platform/gitops/platform/apps sur main.
+@@ -63,11 +65,14 @@
+       platform = {
+         namespace = "argocd"
+         project   = "default"
+-        source = {
++        source = merge({
+           repoURL        = var.platform_repo_url
+           targetRevision = "main"
+           path           = "platform/gitops/platform/apps"
+-        }
++          },
++          # appset_only_env : l'ApplicationSet (40-...) est appliqué par Jenkins avec un seul environnement
++          var.appset_only_env == "" ? {} : { directory = { exclude = "40-events-environments.yaml" } }
++        )
+         destination = {
+           server    = "https://kubernetes.default.svc"
+           namespace = "argocd"
+--- a/platform/terraform/outputs.tf
++++ b/platform/terraform/outputs.tf
+@@ -1,14 +1,14 @@
+ output "devops_public_ip" {
+   description = "IP élastique de l'usine DevOps"
+-  value       = aws_eip.devops.public_ip
++  value       = one(aws_eip.devops[*].public_ip)
+ }
+ 
+ output "devops_urls" {
+-  value = {
+-    jenkins   = "https://jenkins.${aws_eip.devops.public_ip}.sslip.io"
+-    sonarqube = "https://sonar.${aws_eip.devops.public_ip}.sslip.io"
+-    nexus     = "https://nexus.${aws_eip.devops.public_ip}.sslip.io"
+-  }
++  value = var.create_devops_ec2 ? {
++    jenkins   = "https://jenkins.${aws_eip.devops[0].public_ip}.sslip.io"
++    sonarqube = "https://sonar.${aws_eip.devops[0].public_ip}.sslip.io"
++    nexus     = "https://nexus.${aws_eip.devops[0].public_ip}.sslip.io"
++  } : {}
+ }
+ 
+ output "ecr_repository_url" {
+@@ -16,7 +16,7 @@
+ }
+ 
+ output "eks_cluster_name" {
+-  value = module.eks.cluster_name
++  value = local.eks_cluster_name
+ }
+ 
+ output "region" {
+@@ -25,7 +25,7 @@
+ }
+ 
+ output "kubeconfig_command" {
+-  value = "aws eks update-kubeconfig --name ${module.eks.cluster_name} --region ${var.region}"
++  value = "aws eks update-kubeconfig --name ${local.eks_cluster_name} --region ${var.region}"
+ }
+ 
+ output "next_steps" {
+--- a/platform/terraform/values/argocd.yaml.tftpl
++++ b/platform/terraform/values/argocd.yaml.tftpl
+@@ -21,13 +21,20 @@
+ 
+ server:
+   service:
+-    # NLB INTERNE : seul Jenkins (dans le VPC) parle à l'API Argo CD ; l'interface s'ouvre par port-forward
++    # Par défaut : NLB INTERNE, seul Jenkins (dans le VPC) parle à l'API Argo CD ; l'interface s'ouvre par port-forward.
++    # argocd_public = true (Jenkins sur un PC) : NLB public, mais joignable seulement depuis admin_cidr.
+     type: LoadBalancer
+     annotations:
+       service.beta.kubernetes.io/aws-load-balancer-type: nlb
++%{ if !argocd_public ~}
+       service.beta.kubernetes.io/aws-load-balancer-internal: "true"
++%{ endif ~}
+     loadBalancerSourceRanges:
++%{ if argocd_public ~}
++      - ${admin_cidr}
++%{ else ~}
+       - ${vpc_cidr}
++%{ endif ~}
+ 
+ # Argo CD Notifications -> Slack (#igl5-g2-deploiements)
+ notifications:
+--- a/platform/terraform/eks.tf
++++ b/platform/terraform/eks.tf
+@@ -3,6 +3,7 @@
+ }
+ 
+ module "eks" {
++  count   = var.eks_raw ? 0 : 1
+   source  = "terraform-aws-modules/eks/aws"
+   version = "~> 20.31"
+ 
+--- a/platform/terraform/providers.tf
++++ b/platform/terraform/providers.tf
+@@ -14,13 +14,13 @@
+   eks_exec = {
+     api_version = "client.authentication.k8s.io/v1beta1"
+     command     = "aws"
+-    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.region]
++    args        = ["eks", "get-token", "--cluster-name", local.eks_cluster_name, "--region", var.region]
+   }
+ }
+ 
+ provider "kubernetes" {
+-  host                   = module.eks.cluster_endpoint
+-  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
++  host                   = local.eks_cluster_endpoint
++  cluster_ca_certificate = base64decode(local.eks_cluster_ca)
+   exec {
+     api_version = local.eks_exec.api_version
+     command     = local.eks_exec.command
+@@ -30,8 +30,8 @@
+ 
+ provider "helm" {
+   kubernetes {
+-    host                   = module.eks.cluster_endpoint
+-    cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
++    host                   = local.eks_cluster_endpoint
++    cluster_ca_certificate = base64decode(local.eks_cluster_ca)
+     exec {
+       api_version = local.eks_exec.api_version
+       command     = local.eks_exec.command
+--- a/platform/terraform/eks-lab.tf
++++ b/platform/terraform/eks-lab.tf
+@@ -0,0 +1,55 @@
++# =============================================================================
++#  Cluster EKS en ressources simples (eks_raw = true), pour les Learner Lab qui refusent iam:GetRole.
++#  Le module communautaire terraform-aws-modules/eks appelle toujours data.aws_iam_session_context,
++#  qui lit le rôle de la session (voclabs) : « explicit deny » sur certains comptes Academy.
++#  Ici : cluster et nœuds utilisent LabRole, aucun appel IAM. Les add-ons de base (CoreDNS, kube-proxy, VPC CNI)
++#  sont installés automatiquement par EKS ; le pilote EBS CSI n'est pas installé (inutile : base MySQL éphémère en review).
++# =============================================================================
++resource "aws_eks_cluster" "lab" {
++  count    = var.eks_raw ? 1 : 0
++  name     = var.project
++  version  = var.cluster_version
++  role_arn = var.lab_role_arn
++
++  vpc_config {
++    subnet_ids              = concat(module.vpc.private_subnets, module.vpc.public_subnets)
++    endpoint_private_access = true
++    endpoint_public_access  = true
++    public_access_cidrs     = [var.admin_cidr]
++  }
++
++  access_config {
++    authentication_mode                         = "API_AND_CONFIG_MAP"
++    bootstrap_cluster_creator_admin_permissions = true # l'identité qui lance Terraform devient administrateur du cluster
++  }
++
++  lifecycle {
++    precondition {
++      condition     = var.lab_role_arn != ""
++      error_message = "eks_raw = true exige lab_role_arn (ARN de LabRole)."
++    }
++  }
++}
++
++resource "aws_eks_node_group" "lab" {
++  count           = var.eks_raw ? 1 : 0
++  cluster_name    = aws_eks_cluster.lab[0].name
++  node_group_name = "workers"
++  node_role_arn   = var.lab_role_arn
++  subnet_ids      = module.vpc.private_subnets
++  ami_type        = "AL2023_x86_64_STANDARD"
++  instance_types  = [var.node_instance_type]
++
++  scaling_config {
++    min_size     = 2
++    desired_size = 2
++    max_size     = 4
++  }
++}
++
++# Adresse du cluster, quel que soit le mode (module ou ressources simples)
++locals {
++  eks_cluster_name     = var.eks_raw ? aws_eks_cluster.lab[0].name : module.eks[0].cluster_name
++  eks_cluster_endpoint = var.eks_raw ? aws_eks_cluster.lab[0].endpoint : module.eks[0].cluster_endpoint
++  eks_cluster_ca       = var.eks_raw ? aws_eks_cluster.lab[0].certificate_authority[0].data : module.eks[0].cluster_certificate_authority_data
++}

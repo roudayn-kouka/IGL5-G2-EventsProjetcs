@@ -93,3 +93,9 @@ variable "appset_only_env" {
   type        = string
   default     = ""
 }
+
+variable "eks_raw" {
+  description = "true = cluster EKS en ressources simples (aws_eks_cluster) au lieu du module communautaire. Nécessaire sur certains Learner Lab : le module lit iam:GetRole sur le rôle de la session (voclabs), refusé par une politique explicite. Exige lab_role_arn."
+  type        = bool
+  default     = false
+}

@@ -3,6 +3,7 @@ locals {
 }
 
 module "eks" {
+  count   = var.eks_raw ? 0 : 1
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 20.31"
 

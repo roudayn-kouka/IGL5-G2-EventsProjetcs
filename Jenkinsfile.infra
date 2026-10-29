@@ -7,6 +7,7 @@
 //      create_devops_ec2 = false   pas d'EC2 « usine DevOps » (Jenkins, Nexus, SonarQube sont déjà sur ton PC)
 //      argocd_public     = true    NLB Argo CD public, mais ouvert seulement à ton IP (admin_cidr)
 //      appset_only_env   = participant   seul l'environnement participant est déployé (pas staging ni prod)
+//      eks_raw           = true    cluster EKS en ressources simples : le module EKS lit iam:GetRole, refusé par ton Learner Lab
 //  L'état Terraform est local (backend_override.tf généré ici) : pas de bucket S3 ni de table DynamoDB.
 //
 //  Job à part : Jenkins > New Item > « Pipeline » > « Pipeline script from SCM » > Git, dépôt de l'application,
@@ -116,6 +117,7 @@ cluster_version    = "${params.CLUSTER_VERSION}"
 node_instance_type = "t3.large"
 admin_cidr         = "${env.MY_IP}/32"
 create_devops_ec2  = false
+eks_raw            = true
 argocd_public      = true
 appset_only_env    = "${env.APPSET_ENV}"
 """

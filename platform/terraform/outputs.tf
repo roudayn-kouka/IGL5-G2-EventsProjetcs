@@ -16,7 +16,7 @@ output "ecr_repository_url" {
 }
 
 output "eks_cluster_name" {
-  value = module.eks.cluster_name
+  value = local.eks_cluster_name
 }
 
 output "region" {
@@ -25,7 +25,7 @@ output "region" {
 }
 
 output "kubeconfig_command" {
-  value = "aws eks update-kubeconfig --name ${module.eks.cluster_name} --region ${var.region}"
+  value = "aws eks update-kubeconfig --name ${local.eks_cluster_name} --region ${var.region}"
 }
 
 output "next_steps" {
