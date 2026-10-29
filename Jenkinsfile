@@ -303,11 +303,18 @@ fi
         stage('Promotion GitOps') {
             when { expression { env.DEPLOY == 'true' } }
             steps {
-                withCredentials([usernamePassword(credentialsId: 'github-credentials',
+                withCredentials([usernamePassword(credentialsId: env.FEATURE_SLUG == 'feedback' ? 'events-github-read' : 'github-credentials',
                                                   usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
                     // Jenkins ne déploie pas : il décrit l'état voulu sur la branche gitops.
                     // L'ApplicationSet Argo CD crée automatiquement l'environnement s'il est nouveau.
                     sh '''
+                      set +x
+                      set -eu
+                      # Never allow a promotion to overwrite an application branch.
+                      [ "$GITOPS_BRANCH" = gitops ] || { echo 'Expected GitOps branch gitops'; exit 1; }
+                      if [ "$FEATURE_SLUG" = feedback ]; then
+                        [ "$ENV_NAME" = feedback ] && [ "$K8S_NAMESPACE" = events-feedback ] || exit 1
+                      fi
                       rm -rf gitops-work
                       AUTH_HEADER="AUTHORIZATION: basic $(printf '%s' "$GIT_USER:$GIT_TOKEN" | base64 | tr -d '\n')"
                       git -c http.extraheader="$AUTH_HEADER" \
@@ -317,6 +324,13 @@ fi
                       unset AUTH_HEADER
                       ENV_DIR="gitops-work/envs/$ENV_NAME"
                       mkdir -p "$ENV_DIR"
+                      if [ "$FEATURE_SLUG" = feedback ]; then
+                        # Argo cannot render two revisions of this same Git repository.
+                        # Keep the reviewed chart and runtime values in one Feedback-only revision.
+                        rm -rf "$ENV_DIR/chart"
+                        cp -R platform/gitops/charts/events-app "$ENV_DIR/chart"
+                        printf '%s\n' "$GIT_COMMIT" > "$ENV_DIR/chart-source-commit.txt"
+                      fi
 
                       cat > "$ENV_DIR/config.json" <<EOF
 { "namespace": "$K8S_NAMESPACE", "profile": "$HELM_PROFILE", "owner": "$OWNER_SLUG" }
@@ -335,6 +349,11 @@ EOF
                       git config user.name  "Jenkins FST"
                       git config user.email "jenkins@fst-events.local"
                       git add "envs/$ENV_NAME"
+                      if [ "$FEATURE_SLUG" = feedback ]; then
+                        git diff --cached --name-only | while IFS= read -r path; do
+                          case "$path" in envs/feedback/*) ;; *) echo 'Refusing unrelated GitOps changes'; exit 1 ;; esac
+                        done
+                      fi
                       git diff --cached --quiet || git commit -m "deploy($ENV_NAME): $IMAGE_TAG [build #$BUILD_NUMBER · $OWNER]"
 
                       # Plusieurs membres peuvent promouvoir en même temps : rebase puis nouvel essai
@@ -365,12 +384,13 @@ EOF
                 withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
                     // On attend qu'Argo CD ait appliqué EXACTEMENT notre révision et que l'appli soit saine
                     sh '''
+                      set +x
                       APP="events-$ENV_NAME"
                       WANTED=$(cat gitops-revision.txt)
                       for i in $(seq 1 60); do
                         J=$(argocd app get "$APP" --refresh -o json 2>/dev/null || true)
-                        REV=$(echo "$J" | jq -r '(.status.sync.revisions // []) | join(",")')
-                        REV_MATCH=$(echo "$J" | jq -r --arg wanted "$WANTED" '(.status.sync.revisions // []) | index($wanted) != null')
+                        REV=$(echo "$J" | jq -r '(.status.sync.revisions // [.status.sync.revision]) | join(",")')
+                        REV_MATCH=$(echo "$J" | jq -r --arg wanted "$WANTED" '(.status.sync.revisions // [.status.sync.revision]) | index($wanted) != null')
                         SYNC=$(echo "$J" | jq -r '.status.sync.status // empty')
                         HEALTH=$(echo "$J" | jq -r '.status.health.status // empty')
                         echo "[$i] $APP révisions=$REV commit-attendu=$REV_MATCH sync=$SYNC santé=$HEALTH"

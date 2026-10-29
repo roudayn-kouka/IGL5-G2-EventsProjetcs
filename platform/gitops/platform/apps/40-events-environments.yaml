@@ -64,3 +64,18 @@ spec:
             tn.fst/environment: '{{.path.basename}}'
             tn.fst/owner: '{{.owner}}'
         retry: { limit: 5, backoff: { duration: 20s, factor: 2, maxDuration: 3m } }
+
+  # Feedback only: chart snapshot and values share the promoted GitOps commit.
+  # Other environments keep their existing sources and revisions.
+  templatePatch: |
+    {{- if eq .path.basename "feedback" }}
+    spec:
+      sources:
+        - repoURL: https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git
+          targetRevision: gitops
+          path: envs/feedback/chart
+          helm:
+            valueFiles:
+              - values-review.yaml
+              - ../values.yaml
+    {{- end }}
