@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 //  Events Project - FST - IGL5 G2 - Pipeline CI/CD/DevSecOps (GitOps)
 //
 //  UN SEUL Jenkinsfile pour TOUTES les branches (job Jenkins Multibranch Pipeline).
@@ -437,17 +437,19 @@ EOF
                 }
                 stage('DAST - OWASP ZAP') {
                     steps {
-                        script {
-                            def tolerate = (env.SECURITY_GATE == 'strict') ? '' : ' || true'
-                            sh """
-                            mkdir -p zap-out && chmod 777 zap-out
-                            docker run --rm --add-host host.docker.internal:host-gateway \\
-                                -v "\$WORKSPACE/zap-out:/zap/wrk:rw" ${ZAP_IMAGE} \\
-                                zap-baseline.py -t ${env.BASE_URL}/ -I -m 2 \\
-                                -J zap_out.json -r zap_report.html${tolerate}
-                            test -s zap-out/zap_out.json
-                            """
-                        }
+                        sh '''
+                        mkdir -p zap-out
+                        CID=$(docker create --add-host host.docker.internal:host-gateway "$ZAP_IMAGE" \
+                                zap-baseline.py -t "$BASE_URL/" -I -m 2 -J zap_out.json -r zap_report.html)
+                        set +e
+                        docker start -a "$CID"
+                        RC=$?
+                        set -e
+                        docker cp "$CID:/zap/wrk/." zap-out/ || true
+                        docker rm -v "$CID" >/dev/null
+                        test -s zap-out/zap_out.json || { echo "ZAP n'a produit aucun rapport."; exit 1; }
+                        if [ "$SECURITY_GATE" = "strict" ]; then exit "$RC"; fi
+                        '''
                     }
                 }
             }
