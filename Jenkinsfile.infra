@@ -1,6 +1,20 @@
 // Job infra : Terraform installe Prometheus + Grafana sur le cluster kind.
 // ACTION = plan-only (defaut, ne change rien) | apply | destroy
 
+// Lance Terraform dans un conteneur. Le state est dans le volume Docker "tfstate".
+def tf(String args) {
+  sh """
+    docker run --rm \
+      -v ${env.WORKSPACE}/${env.TF_DIR}:/tf \
+      -v tfstate:/state -w /tf \
+      --add-host host.docker.internal:host-gateway \
+      -e TF_IN_AUTOMATION=true \
+      -e TF_VAR_kubeconfig_path=/tf/.kubeconfig \
+      hashicorp/terraform:1.9.8 ${args}
+  """
+}
+
+// Copie le kubeconfig (credential Secret file) dans le dossier Terraform, puis le supprime
 def withKube(Closure body) {
   withCredentials([file(credentialsId: 'kubeconfig-kind', variable: 'KUBECONFIG_FILE')]) {
     sh 'cp "$KUBECONFIG_FILE" "$WORKSPACE/$TF_DIR/.kubeconfig"'
@@ -25,22 +39,20 @@ pipeline {
   }
 
   environment {
-    TF_IMAGE  = 'hashicorp/terraform:1.9.8'
     TRIVY_IMG = 'aquasec/trivy:0.56.2'
     TF_DIR    = 'infra/terraform'
-    // Le state vit dans un volume Docker nomme : il survit au nettoyage du workspace
-    TF = 'docker run --rm -v $WORKSPACE/$TF_DIR:/tf -v tfstate:/state -w /tf --add-host host.docker.internal:host-gateway -e TF_IN_AUTOMATION=true -e TF_VAR_kubeconfig_path=/tf/.kubeconfig hashicorp/terraform:1.9.8'
   }
 
   stages {
 
     stage('Terraform setup') {
       steps {
+        script {
+          tf('fmt -check -recursive')
+          tf('init -input=false -reconfigure -backend-config=path=/state/events-monitoring.tfstate')
+          tf('validate')
+        }
         sh '''
-          set -e
-          $TF fmt -check -recursive
-          $TF init -input=false -reconfigure -backend-config="path=/state/events-monitoring.tfstate"
-          $TF validate
           docker run --rm -v "$WORKSPACE/$TF_DIR:/src" $TRIVY_IMG config \
             --severity HIGH,CRITICAL --exit-code 0 --format table /src | tee trivy-iac.txt
         '''
@@ -52,10 +64,10 @@ pipeline {
       steps {
         script {
           withKube {
+            tf('plan -input=false -out=tfplan')
             sh '''
-              set -e
-              $TF plan -input=false -out=tfplan
-              $TF show -no-color tfplan > "$WORKSPACE/tfplan.txt"
+              docker run --rm -v "$WORKSPACE/$TF_DIR:/tf" -w /tf hashicorp/terraform:1.9.8 \
+                show -no-color tfplan > "$WORKSPACE/tfplan.txt"
             '''
           }
         }
@@ -75,14 +87,9 @@ pipeline {
       when { expression { params.ACTION == 'apply' } }
       steps {
         script {
-          withKube {
-            sh '$TF apply -input=false tfplan'
-          }
+          withKube { tf('apply -input=false tfplan') }
         }
-        echo """Monitoring installe.
-- Mot de passe Grafana : kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}'  (base64)
-- Grafana    : kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80  -> http://localhost:3000 (user admin)
-- Prometheus : kubectl -n monitoring port-forward svc/monitoring-kube-prometheus-prometheus 9090:9090"""
+        echo 'Monitoring installe. Grafana : kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80'
       }
     }
 
@@ -99,9 +106,7 @@ pipeline {
       when { expression { params.ACTION == 'destroy' } }
       steps {
         script {
-          withKube {
-            sh '$TF destroy -input=false -auto-approve'
-          }
+          withKube { tf('destroy -input=false -auto-approve') }
         }
       }
     }
@@ -110,8 +115,6 @@ pipeline {
   post {
     always {
       archiveArtifacts artifacts: 'tfplan.txt, trivy-iac.txt', allowEmptyArchive: true
-      // Terraform tourne en root : on rend les fichiers a Jenkins pour que le nettoyage fonctionne
-      sh 'docker run --rm -v "$WORKSPACE:/w" alpine chown -R $(id -u):$(id -g) /w || true'
       sh 'rm -f $WORKSPACE/$TF_DIR/.kubeconfig $WORKSPACE/$TF_DIR/tfplan || true'
     }
   }
