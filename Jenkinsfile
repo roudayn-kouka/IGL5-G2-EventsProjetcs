@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 //  Events Project - FST - IGL5 G2 - Pipeline CI/CD/DevSecOps (GitOps)
 //
 //  UN SEUL Jenkinsfile pour TOUTES les branches (job Jenkins Multibranch Pipeline).
@@ -439,7 +439,8 @@ EOF
                     steps {
                         sh '''
                         mkdir -p zap-out
-                        CID=$(docker create --add-host host.docker.internal:host-gateway "$ZAP_IMAGE" \
+                        CID=$(docker create --user root -v /zap/wrk \
+                                --add-host host.docker.internal:host-gateway "$ZAP_IMAGE" \
                                 zap-baseline.py -t "$BASE_URL/" -I -m 2 -J zap_out.json -r zap_report.html)
                         set +e
                         docker start -a "$CID"
