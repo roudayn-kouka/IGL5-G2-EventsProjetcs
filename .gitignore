@@ -53,3 +53,11 @@ platform/ansible/group_vars/devops/runtime.yml
 *.log
 trivy-*.txt
 gitleaks-report.json
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+tfplan
+tfplan.txt
