@@ -1,4 +1,4 @@
-# Remplacé automatiquement par « terraform apply »
+# Exemple : le vrai terraform.yml est généré par « terraform apply » (ignoré par Git)
 aws_region: "eu-west-3"
 ecr_registry: "000000000000.dkr.ecr.eu-west-3.amazonaws.com"
 eks_cluster_name: "fst-events"

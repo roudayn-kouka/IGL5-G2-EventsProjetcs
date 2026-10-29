@@ -180,7 +180,7 @@ kubectl get nodes
 kubectl -n argocd get applications
 ```
 
-Terraform génère l'inventaire Ansible dans `ansible/inventory/hosts.ini` et les valeurs de relais dans `ansible/group_vars/devops/terraform.yml`. Ces fichiers sont produits localement après `apply`.
+Terraform génère l'inventaire Ansible dans `ansible/inventory/hosts.ini` et les valeurs de relais dans `ansible/group_vars/devops/terraform.yml`. Ces fichiers sont produits localement après `apply` et **ignorés par Git** (seuls les `*.example` sont versionnés) : un `git stash` ou `git checkout` ne peut plus les remettre aux valeurs d'exemple.
 
 ## 4. Découvrir les adresses des load balancers
 
@@ -365,7 +365,7 @@ Jenkins tourne en conteneur Docker sur l'EC2 **`fst-events-devops`** (Docker Com
    ```
 
    Copier la valeur dans `vault_argocd_token` (`ansible-vault edit ansible/group_vars/devops/vault.yml`), sans l'afficher ailleurs.
-4. **Reconfigurer Jenkins** : `make configure`. Vérifier avant que l'inventaire et `group_vars/devops/terraform.yml` contiennent les vraies valeurs (IP de l'EC2, registre ECR, région) et non les valeurs d'exemple (`203.0.113.10`, `000000000000`) : ils sont régénérés par `terraform apply`. Ansible réécrit la configuration JCasC (`ARGOCD_SERVER`, `APPS_DOMAIN`, `GITOPS_BRANCH`) et le credential `argocd-token`.
+4. **Reconfigurer Jenkins** : `make configure`. Le playbook commence par `ansible/preflight.yml` (local, sans SSH) et s'arrête si l'inventaire ou `group_vars/devops/terraform.yml` contiennent des valeurs d'exemple (`203.0.113.10`, `000000000000`) ou un registre ECR hors de la région, si `argocd_server`/`apps_domain` manquent dans `runtime.yml`, ou si `vault_argocd_token` est vide. Vérification seule : `cd ansible && ansible-playbook preflight.yml --ask-vault-pass`. Ansible réécrit la configuration JCasC (`ARGOCD_SERVER`, `APPS_DOMAIN`, `GITOPS_BRANCH`) et le credential `argocd-token`.
 5. **Credentials Jenkins** (créés par JCasC à partir du Vault) : `github-credentials` (push sur `gitops`), `argocd-token`, `sonar-token`, `nexus-credentials`. AWS/ECR : rôle de l'instance (`LabInstanceProfile` sur AWS Academy), aucune clé stockée.
 
 ### Ce que vérifie le pipeline
@@ -388,7 +388,7 @@ Jenkins tourne en conteneur Docker sur l'EC2 **`fst-events-devops`** (Docker Com
 | `Révision appliquée et saine, mais l'image … n'est pas déployée` | Valeurs non prises en compte par le chart | Comparer `envs/<env>/values.yaml` et le chart |
 | `DNS : le nom de http://… ne se résout pas` (étape 14) | `APPS_DOMAIN` vide ou faux | Prérequis 2 puis 4 |
 
-Tests des scripts, sans cluster ni AWS : `bash ci/tests/test-deploy-preflight.sh`, `bash ci/tests/test-gitops-promote.sh`, `bash ci/tests/test-argocd-wait.sh`.
+Tests des scripts, sans cluster ni AWS : `bash ci/tests/test-deploy-preflight.sh`, `bash ci/tests/test-gitops-promote.sh`, `bash ci/tests/test-argocd-wait.sh`, `bash platform/ansible/tests/test-preflight.sh`.
 
 ## 9. Contrôles locaux sans action AWS
 

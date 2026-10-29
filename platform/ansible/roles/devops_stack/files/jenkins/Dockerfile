@@ -1,6 +1,7 @@
 # Jenkins LTS + outillage du pipeline : Maven, Docker CLI, AWS CLI, Argo CD CLI, jq
 # (plus de kubectl ni de Helm : en GitOps, Jenkins ne touche jamais au cluster)
-FROM jenkins/jenkins:2.479.3-lts-jdk17
+# Version épinglée sur celle en service : JENKINS_HOME ne supporte pas un retour arrière
+FROM jenkins/jenkins:2.541.3-lts-jdk17
 
 USER root
 ARG ARGOCD_VERSION=v2.13.3
