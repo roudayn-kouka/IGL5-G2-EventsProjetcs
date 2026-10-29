@@ -2,7 +2,7 @@
 feature: prod
 owner: equipe-igl5-g2
 image:
-  repository: 000000000000.dkr.ecr.eu-west-3.amazonaws.com/events-app
-  tag: prod-0-initial
+  repository: 315488743028.dkr.ecr.us-east-1.amazonaws.com/events-app
+  tag: staging-6-0de6685
 ingress:
   host: "prod.44.221.55.161.sslip.io"
