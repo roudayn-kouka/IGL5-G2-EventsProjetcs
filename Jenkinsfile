@@ -28,7 +28,7 @@ pipeline {
 
     options {
         timestamps()
-        ansiColor('xterm')
+        // No ansiColor option: avoids requiring the AnsiColor Jenkins plugin.
         timeout(time: 45, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '15', artifactNumToKeepStr: '5'))
         disableConcurrentBuilds()
@@ -106,14 +106,23 @@ pipeline {
                 stage('Build Maven') {
                     steps {
                         sh "${MVN} versions:set -DnewVersion=${APP_VERSION} -DgenerateBackupPoms=false"
-                        sh "${MVN} clean compile"
+                        // Maven also runs npm ci + Angular production build, and packages a single JAR.
+                        sh "${MVN} clean verify"
                     }
                 }
 
                 // ------------------------------------------------------------ 4
                 stage('Tests & couverture') {
                     steps {
-                        sh "${MVN} verify"
+                        sh '''
+                          test -f frontend/dist/app/index.html || { echo "Angular index missing"; exit 1; }
+                          test -f target/classes/static/app/index.html || { echo "Angular not copied into Spring static"; exit 1; }
+                          JAR=$(find target -maxdepth 1 -type f -name '*.jar' ! -name '*.jar.original' | head -n1)
+                          [ -n "$JAR" ] || { echo "JAR missing"; exit 1; }
+                          jar tf "$JAR" | grep -F 'BOOT-INF/classes/static/app/index.html' >/dev/null || {
+                            echo "Angular not found inside JAR"; exit 1;
+                          }
+                        ''' 
                     }
                     post {
                         always {
@@ -175,7 +184,7 @@ pipeline {
                         withCredentials([usernamePassword(credentialsId: 'nexus-credentials',
                                                           usernameVariable: 'NEXUS_USR', passwordVariable: 'NEXUS_PSW')]) {
                             sh """
-                              ${MVN} -s ci/maven-settings.xml deploy -DskipTests \
+                              ${MVN} -s ci/maven-settings.xml deploy -DskipTests -Dskip.npm -Dskip.installnodenpm \
                                 -DaltDeploymentRepository=nexus::default::${env.NEXUS_URL}/repository/maven-snapshots/
                             """
                         }
@@ -326,6 +335,10 @@ ingress:
                                   }
                                   $C -fsS --retry 10 --retry-delay 6 --retry-all-errors -o /dev/null "$BASE/actuator/prometheus"
                                   echo "Endpoint Prometheus disponible."
+                                  $C -fsS --retry 10 --retry-delay 6 --retry-all-errors "$BASE/app/" | grep -F '<app-root' >/dev/null || {
+                                    echo "Dashboard Angular /events/app/ unavailable"; exit 1;
+                                  }
+                                  echo "Dashboard Angular disponible sur $BASE/app/"
 
                                   for endpoint in "$BASE/event-stats/summary" "$BASE/event/"; do
                                     STATUS=$($C -sS -o /dev/null -w '%{http_code}' "$endpoint" || true)

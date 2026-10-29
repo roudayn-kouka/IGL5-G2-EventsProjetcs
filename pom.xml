@@ -163,6 +163,58 @@
                     </execution>
                 </executions>
             </plugin>
+
+            <!-- Angular is built by Maven before Spring Boot resources are packaged. -->
+            <plugin>
+                <groupId>com.github.eirslett</groupId>
+                <artifactId>frontend-maven-plugin</artifactId>
+                <version>1.15.1</version>
+                <configuration>
+                    <workingDirectory>${project.basedir}/frontend</workingDirectory>
+                    <installDirectory>${project.build.directory}</installDirectory>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>angular-install-node</id>
+                        <phase>generate-resources</phase>
+                        <goals><goal>install-node-and-npm</goal></goals>
+                        <configuration><nodeVersion>v20.19.5</nodeVersion></configuration>
+                    </execution>
+                    <execution>
+                        <id>angular-npm-ci</id>
+                        <phase>generate-resources</phase>
+                        <goals><goal>npm</goal></goals>
+                        <configuration><arguments>ci --no-audit --no-fund</arguments></configuration>
+                    </execution>
+                    <execution>
+                        <id>angular-build</id>
+                        <phase>generate-resources</phase>
+                        <goals><goal>npm</goal></goals>
+                        <configuration><arguments>run build</arguments></configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Copy compiled Angular app into BOOT-INF/classes/static/app/. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-angular-to-spring-static</id>
+                        <phase>process-resources</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <outputDirectory>${project.build.outputDirectory}/static/app</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/frontend/dist/app</directory>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 
