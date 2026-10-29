@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 //  Events Project - FST - IGL5 G2 - Pipeline CI/CD/DevSecOps (GitOps)
 //
 //  UN SEUL Jenkinsfile pour TOUTES les branches (job Jenkins Multibranch Pipeline).
@@ -79,9 +79,14 @@ pipeline {
                     env.DEPLOY        = (env.BRANCH_TYPE == 'pr') ? 'false' : 'true'
                     env.SECURITY_GATE = (env.BRANCH_TYPE in ['main', 'release']) ? 'strict' : 'report'
                     env.APP_VERSION   = (env.BRANCH_TYPE == 'main') ? "1.0.${env.BUILD_NUMBER}" : "1.0.0-${env.FEATURE_SLUG}-SNAPSHOT"
+                                        env.APP_VERSION   = (env.BRANCH_TYPE == 'main') ? "1.0.${env.BUILD_NUMBER}" : "1.0.0-${env.FEATURE_SLUG}-SNAPSHOT"
+                    if (env.DEPLOY == 'true' && !env.ECR_REGISTRY) {
+                        error "Variable globale ECR_REGISTRY non définie (Manage Jenkins > System > Global properties)"
+                    }
                     env.IMAGE_TAG     = "${env.FEATURE_SLUG}-${env.BUILD_NUMBER}-${env.GIT_SHORT}"
                     env.IMAGE         = "${env.ECR_REGISTRY ?: 'registry.local'}/${env.APP_NAME}:${env.IMAGE_TAG}"
                     env.SONAR_KEY     = "fst-events-${env.FEATURE_SLUG}"
+                    
                     env.APP_HOST      = "${env.ENV_NAME}.${env.APPS_DOMAIN ?: 'apps.local'}"
 
                     currentBuild.displayName = "#${env.BUILD_NUMBER} - ${env.FEATURE_SLUG}"
@@ -272,7 +277,25 @@ pipeline {
                 }
             }
         }
-
+                // ------------------------------------------------------------ 10b
+        stage('Chargement image - kind local') {
+            when {
+                allOf {
+                    expression { env.DEPLOY == 'true' }
+                    expression { env.KIND_NODE }
+                }
+            }
+            steps {
+                sh '''
+                  set -e
+                  # Import dans le containerd du noeud kind : evite le pull ECR (BatchGetImage refuse par le Learner Lab)
+                  docker save "$IMAGE" | docker exec -i "$KIND_NODE" ctr -n k8s.io images import --digests --all-platforms -
+                  docker exec "$KIND_NODE" crictl images | grep "$IMAGE_TAG" \
+                    || { echo "Image $IMAGE_TAG absente du noeud $KIND_NODE apres l'import."; exit 1; }
+                  echo "Image $IMAGE_TAG chargee dans $KIND_NODE."
+                '''
+            }
+        }
         // ------------------------------------------------------------ 12
         stage('Promotion GitOps') {
             when { expression { env.DEPLOY == 'true' } }
@@ -367,7 +390,8 @@ EOF
                         if [ "$REV_MATCH" = "true" ] && [ "$SYNC" = "Synced" ] && [ "$HEALTH" = "Healthy" ]; then
                           echo "Deploye et sain."; exit 0
                         fi
-                        if [ "$REV_MATCH" = "true" ] && [ "$HEALTH" = "Degraded" ]; then
+                                                if [ "$REV_MATCH" = "true" ] && [ "$SYNC" = "Synced" ] && [ "$HEALTH" = "Degraded" ]; then
+                        
                           echo "Deploiement degrade. Ressources en erreur :"
                           jq -r '.status.resources[]? | select(.health.status != null and .health.status != "Healthy") | "\\(.kind)/\\(.name): \\(.health.status) - \\(.health.message // "")"' app.json
                           exit 1
