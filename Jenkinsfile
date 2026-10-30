@@ -4,6 +4,7 @@
 //  UN SEUL Jenkinsfile (job Multibranch Pipeline). Le parametre ACTION choisit le mode :
 //
 //    ACTION = app            (defaut, push / PR / build auto) : CI/CD de l'application
+//    ACTION = app-infra      : terraform plan + approbation + apply, PUIS CI/CD application [feature/logistics]
 //    ACTION = infra-plan     : Terraform init + validate + plan (ne change rien)   [feature/logistics]
 //    ACTION = infra-apply    : plan + approbation + apply + token Argo CD + ApplicationSet
 //    ACTION = infra-destroy  : approbation + nettoyage du cluster + terraform destroy
@@ -45,8 +46,8 @@ pipeline {
     }
 
     parameters {
-        choice(name: 'ACTION', choices: ['app', 'infra-plan', 'infra-apply', 'infra-destroy'],
-               description: 'app = CI/CD application | infra-plan = ne change rien | infra-apply = cree VPC + EKS + ECR + Argo CD | infra-destroy = tout supprimer (feature/logistics uniquement)')
+        choice(name: 'ACTION', choices: ['app', 'app-infra', 'infra-plan', 'infra-apply', 'infra-destroy'],
+               description: 'app = CI/CD application | app-infra = terraform apply (avec approbation) PUIS CI/CD application | infra-plan = ne change rien | infra-apply = cree VPC + EKS + ECR + Argo CD | infra-destroy = tout supprimer (feature/logistics uniquement)')
         string(name: 'CLUSTER_VERSION', defaultValue: '1.35',
                description: 'Version Kubernetes en SUPPORT STANDARD (le support etendu coute 6 fois plus). Liste : aws eks describe-cluster-versions')
     }
@@ -73,10 +74,240 @@ pipeline {
     stages {
 
         // =====================================================================
-        //  BLOC 1 : CI/CD APPLICATION  (ACTION = app)
+        //  BLOC 1 : INFRASTRUCTURE AWS  (ACTION = infra-* ou app-infra, branche feature/logistics) - execute AVANT l'application
+        // =====================================================================
+        stage('Infrastructure AWS') {
+            when {
+                allOf {
+                    expression { params.ACTION.startsWith('infra-') || params.ACTION == 'app-infra' }
+                    branch 'feature/logistics'     // garde-fou : jamais d'infra depuis une autre branche
+                }
+            }
+            options { timeout(time: 120, unit: 'MINUTES') }
+            environment {
+                // Redefinies ici pour ne pas ecraser la variable globale AWS_REGION du bloc app
+                AWS_REGION         = 'us-east-1'
+                AWS_DEFAULT_REGION = 'us-east-1'
+                CLUSTER            = 'fst-events'                 // = variable « project » de platform/terraform
+                TF_DIR             = 'platform/terraform'
+                // Etat Terraform dans le volume Jenkins (survit au redemarrage, hors Git)
+                TF_STATE           = '/var/jenkins_home/tfstate/fst-events.tfstate'
+                TF_IN_AUTOMATION   = 'true'
+                APPSET_ENV         = 'logistics'                  // seul environnement deploye
+                ARGOCD_DIR         = '/var/jenkins_home/argocd'   // adresse + token
+                ARGOCD_OPTS        = '--grpc-web --plaintext'     // Argo CD de l'equipe en HTTP (server.insecure)
+                KUBECONFIG         = "${WORKSPACE}/.kubeconfig"
+            }
+            stages {
+
+                stage('Terraform setup') {
+                    steps {
+                        writeFile file: "${env.TF_DIR}/backend_override.tf", text: """terraform {
+  backend "local" {
+    path = "${env.TF_STATE}"
+  }
+}
+"""
+                        sh '''
+                          mkdir -p "$(dirname $TF_STATE)"
+                          terraform version
+                          trivy config --severity HIGH,CRITICAL --exit-code 0 --skip-dirs '**/.terraform' --format table -o trivy-iac.txt $TF_DIR
+                          cd $TF_DIR
+                          terraform init -input=false -reconfigure
+                          terraform validate
+                        '''
+                    }
+                }
+
+                stage('AWS identity') {
+                    steps {
+                        script {
+                            withAws {
+                                try { sh 'aws sts get-caller-identity' }
+                                catch (e) { error('AWS refuse les clés : recopie les 3 valeurs (Learner Lab > AWS Details > AWS CLI) dans les credentials Jenkins') }
+                                env.LAB_ROLE_ARN = sh(script: 'aws iam get-role --role-name LabRole --query Role.Arn --output text', returnStdout: true).trim()
+                                env.MY_IP        = sh(script: 'curl -fsS https://checkip.amazonaws.com', returnStdout: true).trim()
+                            }
+                            echo "LabRole : ${env.LAB_ROLE_ARN} · IP publique : ${env.MY_IP}"
+                            writeFile file: "${env.TF_DIR}/lab.auto.tfvars", text: """region             = "${env.AWS_REGION}"
+lab_role_arn       = "${env.LAB_ROLE_ARN}"
+cluster_version    = "${params.CLUSTER_VERSION}"
+node_instance_type = "t3.large"
+admin_cidr         = "${env.MY_IP}/32"
+create_devops_ec2  = false
+eks_raw            = true
+argocd_public      = true
+appset_only_env    = "${env.APPSET_ENV}"
+"""
+                        }
+                    }
+                }
+
+                stage('Autoriser ton IP sur l\'API EKS') {
+                    steps {
+                        script {
+                            withAws {
+                                sh 'ALLOW_MISSING_EKS=1 bash platform/scripts/ensure-eks-access.sh'
+                            }
+                        }
+                    }
+                }
+
+                stage('Terraform plan') {
+                    when { expression { params.ACTION in ['infra-plan', 'infra-apply', 'app-infra'] } }
+                    steps {
+                        script {
+                            withTf {
+                                sh '''
+                                  cd $TF_DIR
+                                  # Depot ECR deja cree par le mode app : on l'importe dans l'etat Terraform
+                                  if aws ecr describe-repositories --region $AWS_REGION --repository-names events-app >/dev/null 2>&1 \
+                                      && ! terraform state list | grep -q '^aws_ecr_repository.events_app$'; then
+                                    echo "Depot ECR existant : import dans l'etat Terraform"
+                                    terraform import -input=false aws_ecr_repository.events_app events-app
+                                  fi
+                                  terraform plan -input=false -out=tfplan
+                                  terraform show -no-color tfplan > "$WORKSPACE/tfplan.txt"
+                                '''
+                            }
+                        }
+                    }
+                }
+
+                stage('Approbation : créer l\'infrastructure') {
+                    when { expression { params.ACTION in ['infra-apply', 'app-infra'] } }
+                    steps {
+                        timeout(time: 30, unit: 'MINUTES') {
+                            input message: 'Créer VPC + EKS + ECR + Argo CD maintenant ? (lis tfplan.txt dans les artefacts ; ça consomme du crédit tant que ça tourne)', ok: 'Créer'
+                        }
+                    }
+                }
+
+                stage('Déploiement AWS (terraform apply)') {
+                    when { expression { params.ACTION in ['infra-apply', 'app-infra'] } }
+                    steps {
+                        script {
+                            withTf {
+                                sh '''
+                                  cd $TF_DIR
+                                  terraform apply -input=false tfplan
+                                  aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER
+                                  kubectl wait --for=condition=Ready nodes --all --timeout=600s
+                                  kubectl get nodes
+                                '''
+                            }
+                        }
+                    }
+                }
+
+                stage('Argo CD : adresse + token') {
+                    when { expression { params.ACTION in ['infra-apply', 'app-infra'] } }
+                    steps {
+                        script {
+                            withAws {
+                                sh '''
+                                  set +x
+                                  aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER >/dev/null
+                                  H=""
+                                  for i in $(seq 1 60); do
+                                    H=$(kubectl -n argocd get svc argocd-server -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+                                    [ -n "$H" ] && break
+                                    echo "Load balancer Argo CD pas encore créé ($i/60)..."; sleep 10
+                                  done
+                                  [ -n "$H" ] || { echo "Le NLB d'Argo CD n'a pas d'adresse."; exit 1; }
+                                  PW=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)
+
+                                  for i in $(seq 1 40); do
+                                    argocd login "$H:80" --username admin --password "$PW" >/dev/null 2>&1 && break
+                                    echo "Argo CD pas encore joignable ($i/40)..."; sleep 15
+                                  done
+                                  TOKEN=$(argocd account generate-token --account jenkins --server "$H:80")
+                                  [ -n "$TOKEN" ] || { echo "Génération du token échouée."; exit 1; }
+
+                                  umask 077
+                                  mkdir -p "$ARGOCD_DIR"
+                                  printf '%s' "$H:80"  > "$ARGOCD_DIR/server"
+                                  printf '%s' "$TOKEN" > "$ARGOCD_DIR/token"
+                                  echo "Argo CD joignable sur http://$H ; token écrit dans $ARGOCD_DIR"
+                                '''
+                            }
+                        }
+                    }
+                }
+
+                stage('ApplicationSet : environnement logistics') {
+                    when { expression { params.ACTION in ['infra-apply', 'app-infra'] } }
+                    steps {
+                        script {
+                            withAws {
+                                sh '''
+                                  aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER >/dev/null
+                                  for i in $(seq 1 60); do
+                                    kubectl -n argocd get appproject events >/dev/null 2>&1 && break
+                                    echo "En attente du projet Argo CD « events » ($i/60)..."; sleep 10
+                                  done
+                                  kubectl -n argocd get appproject events
+                                  sed "s#envs/[*]/config.json#envs/$APPSET_ENV/config.json#" platform/gitops/platform/apps/40-events-environments.yaml | kubectl apply -f -
+                                  kubectl -n argocd get applicationsets,applications
+
+                                  for i in $(seq 1 90); do
+                                    H=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+                                    [ -n "$H" ] && { echo "Load balancer ingress-nginx : $H"; exit 0; }
+                                    echo "En attente d'ingress-nginx ($i/90)..."; sleep 10
+                                  done
+                                  echo "ingress-nginx n'a pas de load balancer : regarde l'application ingress-nginx dans Argo CD."; exit 1
+                                '''
+                            }
+                            echo """Infrastructure prête.
+- L'application events-logistics apparaît dans Argo CD après le premier run en ACTION=app (~1 à 3 min).
+- Grafana : mot de passe du credential grafana-admin-password (utilisateur admin)
+  kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80  -> http://localhost:3000
+- Argo CD : http://<adresse dans ${env.ARGOCD_DIR}/server> (utilisateur admin)"""
+                        }
+                    }
+                }
+
+                stage('Approbation : tout détruire') {
+                    when { expression { params.ACTION == 'infra-destroy' } }
+                    steps {
+                        timeout(time: 30, unit: 'MINUTES') {
+                            input message: 'DÉTRUIRE le cluster, les nœuds, le VPC et le dépôt ECR ?', ok: 'Détruire'
+                        }
+                    }
+                }
+
+                stage('Destruction (terraform destroy)') {
+                    when { expression { params.ACTION == 'infra-destroy' } }
+                    steps {
+                        script {
+                            withTf {
+                                sh '''
+                                  if aws eks describe-cluster --name $CLUSTER --region $AWS_REGION >/dev/null 2>&1; then
+                                    aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER
+                                    kubectl -n argocd delete applicationsets,applications --all --timeout=180s || true
+                                    kubectl get ns -o name | grep '^namespace/events-' | xargs -r kubectl delete --timeout=300s || true
+                                    kubectl get svc -A -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.namespace}{" "}{.metadata.name}{"\\n"}{end}' | \
+                                      while read ns name; do kubectl -n $ns delete svc $name --timeout=300s || true; done
+                                    sleep 90
+                                  else
+                                    echo "Aucun cluster : terraform destroy nettoiera seulement ce qui reste dans l'état"
+                                  fi
+                                  cd $TF_DIR
+                                  terraform destroy -input=false -auto-approve
+                                  rm -rf $ARGOCD_DIR
+                                '''
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        //  BLOC 2 : CI/CD APPLICATION  (ACTION = app ou app-infra)
         // =====================================================================
         stage('CI/CD application') {
-            when { expression { params.ACTION == 'app' } }
+            when { expression { params.ACTION in ['app', 'app-infra'] } }
             options { timeout(time: 90, unit: 'MINUTES') }
             stages {
 
@@ -505,236 +736,6 @@ EOF
                 }
             }
         }
-
-        // =====================================================================
-        //  BLOC 2 : INFRASTRUCTURE AWS  (ACTION = infra-*, branche feature/logistics)
-        // =====================================================================
-        stage('Infrastructure AWS') {
-            when {
-                allOf {
-                    expression { params.ACTION.startsWith('infra-') }
-                    branch 'feature/logistics'     // garde-fou : jamais d'infra depuis une autre branche
-                }
-            }
-            options { timeout(time: 120, unit: 'MINUTES') }
-            environment {
-                // Redefinies ici pour ne pas ecraser la variable globale AWS_REGION du bloc app
-                AWS_REGION         = 'us-east-1'
-                AWS_DEFAULT_REGION = 'us-east-1'
-                CLUSTER            = 'fst-events'                 // = variable « project » de platform/terraform
-                TF_DIR             = 'platform/terraform'
-                // Etat Terraform dans le volume Jenkins (survit au redemarrage, hors Git)
-                TF_STATE           = '/var/jenkins_home/tfstate/fst-events.tfstate'
-                TF_IN_AUTOMATION   = 'true'
-                APPSET_ENV         = 'logistics'                  // seul environnement deploye
-                ARGOCD_DIR         = '/var/jenkins_home/argocd'   // adresse + token
-                ARGOCD_OPTS        = '--grpc-web --plaintext'     // Argo CD de l'equipe en HTTP (server.insecure)
-                KUBECONFIG         = "${WORKSPACE}/.kubeconfig"
-            }
-            stages {
-
-                stage('Terraform setup') {
-                    steps {
-                        writeFile file: "${env.TF_DIR}/backend_override.tf", text: """terraform {
-  backend "local" {
-    path = "${env.TF_STATE}"
-  }
-}
-"""
-                        sh '''
-                          mkdir -p "$(dirname $TF_STATE)"
-                          terraform version
-                          trivy config --severity HIGH,CRITICAL --exit-code 0 --skip-dirs '**/.terraform' --format table -o trivy-iac.txt $TF_DIR
-                          cd $TF_DIR
-                          terraform init -input=false -reconfigure
-                          terraform validate
-                        '''
-                    }
-                }
-
-                stage('AWS identity') {
-                    steps {
-                        script {
-                            withAws {
-                                try { sh 'aws sts get-caller-identity' }
-                                catch (e) { error('AWS refuse les clés : recopie les 3 valeurs (Learner Lab > AWS Details > AWS CLI) dans les credentials Jenkins') }
-                                env.LAB_ROLE_ARN = sh(script: 'aws iam get-role --role-name LabRole --query Role.Arn --output text', returnStdout: true).trim()
-                                env.MY_IP        = sh(script: 'curl -fsS https://checkip.amazonaws.com', returnStdout: true).trim()
-                            }
-                            echo "LabRole : ${env.LAB_ROLE_ARN} · IP publique : ${env.MY_IP}"
-                            writeFile file: "${env.TF_DIR}/lab.auto.tfvars", text: """region             = "${env.AWS_REGION}"
-lab_role_arn       = "${env.LAB_ROLE_ARN}"
-cluster_version    = "${params.CLUSTER_VERSION}"
-node_instance_type = "t3.large"
-admin_cidr         = "${env.MY_IP}/32"
-create_devops_ec2  = false
-eks_raw            = true
-argocd_public      = true
-appset_only_env    = "${env.APPSET_ENV}"
-"""
-                        }
-                    }
-                }
-
-                stage('Autoriser ton IP sur l\'API EKS') {
-                    steps {
-                        script {
-                            withAws {
-                                sh 'ALLOW_MISSING_EKS=1 bash platform/scripts/ensure-eks-access.sh'
-                            }
-                        }
-                    }
-                }
-
-                stage('Terraform plan') {
-                    when { expression { params.ACTION in ['infra-plan', 'infra-apply'] } }
-                    steps {
-                        script {
-                            withTf {
-                                sh '''
-                                  cd $TF_DIR
-                                  # Depot ECR deja cree par le mode app : on l'importe dans l'etat Terraform
-                                  if aws ecr describe-repositories --region $AWS_REGION --repository-names events-app >/dev/null 2>&1 \
-                                      && ! terraform state list | grep -q '^aws_ecr_repository.events_app$'; then
-                                    echo "Depot ECR existant : import dans l'etat Terraform"
-                                    terraform import -input=false aws_ecr_repository.events_app events-app
-                                  fi
-                                  terraform plan -input=false -out=tfplan
-                                  terraform show -no-color tfplan > "$WORKSPACE/tfplan.txt"
-                                '''
-                            }
-                        }
-                    }
-                }
-
-                stage('Approbation : créer l\'infrastructure') {
-                    when { expression { params.ACTION == 'infra-apply' } }
-                    steps {
-                        timeout(time: 30, unit: 'MINUTES') {
-                            input message: 'Créer VPC + EKS + ECR + Argo CD maintenant ? (lis tfplan.txt dans les artefacts ; ça consomme du crédit tant que ça tourne)', ok: 'Créer'
-                        }
-                    }
-                }
-
-                stage('Déploiement AWS (terraform apply)') {
-                    when { expression { params.ACTION == 'infra-apply' } }
-                    steps {
-                        script {
-                            withTf {
-                                sh '''
-                                  cd $TF_DIR
-                                  terraform apply -input=false tfplan
-                                  aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER
-                                  kubectl wait --for=condition=Ready nodes --all --timeout=600s
-                                  kubectl get nodes
-                                '''
-                            }
-                        }
-                    }
-                }
-
-                stage('Argo CD : adresse + token') {
-                    when { expression { params.ACTION == 'infra-apply' } }
-                    steps {
-                        script {
-                            withAws {
-                                sh '''
-                                  set +x
-                                  aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER >/dev/null
-                                  H=""
-                                  for i in $(seq 1 60); do
-                                    H=$(kubectl -n argocd get svc argocd-server -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
-                                    [ -n "$H" ] && break
-                                    echo "Load balancer Argo CD pas encore créé ($i/60)..."; sleep 10
-                                  done
-                                  [ -n "$H" ] || { echo "Le NLB d'Argo CD n'a pas d'adresse."; exit 1; }
-                                  PW=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)
-
-                                  for i in $(seq 1 40); do
-                                    argocd login "$H:80" --username admin --password "$PW" >/dev/null 2>&1 && break
-                                    echo "Argo CD pas encore joignable ($i/40)..."; sleep 15
-                                  done
-                                  TOKEN=$(argocd account generate-token --account jenkins --server "$H:80")
-                                  [ -n "$TOKEN" ] || { echo "Génération du token échouée."; exit 1; }
-
-                                  umask 077
-                                  mkdir -p "$ARGOCD_DIR"
-                                  printf '%s' "$H:80"  > "$ARGOCD_DIR/server"
-                                  printf '%s' "$TOKEN" > "$ARGOCD_DIR/token"
-                                  echo "Argo CD joignable sur http://$H ; token écrit dans $ARGOCD_DIR"
-                                '''
-                            }
-                        }
-                    }
-                }
-
-                stage('ApplicationSet : environnement logistics') {
-                    when { expression { params.ACTION == 'infra-apply' } }
-                    steps {
-                        script {
-                            withAws {
-                                sh '''
-                                  aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER >/dev/null
-                                  for i in $(seq 1 60); do
-                                    kubectl -n argocd get appproject events >/dev/null 2>&1 && break
-                                    echo "En attente du projet Argo CD « events » ($i/60)..."; sleep 10
-                                  done
-                                  kubectl -n argocd get appproject events
-                                  sed "s#envs/[*]/config.json#envs/$APPSET_ENV/config.json#" platform/gitops/platform/apps/40-events-environments.yaml | kubectl apply -f -
-                                  kubectl -n argocd get applicationsets,applications
-
-                                  for i in $(seq 1 90); do
-                                    H=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
-                                    [ -n "$H" ] && { echo "Load balancer ingress-nginx : $H"; exit 0; }
-                                    echo "En attente d'ingress-nginx ($i/90)..."; sleep 10
-                                  done
-                                  echo "ingress-nginx n'a pas de load balancer : regarde l'application ingress-nginx dans Argo CD."; exit 1
-                                '''
-                            }
-                            echo """Infrastructure prête.
-- L'application events-logistics apparaît dans Argo CD après le premier run en ACTION=app (~1 à 3 min).
-- Grafana : mot de passe du credential grafana-admin-password (utilisateur admin)
-  kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80  -> http://localhost:3000
-- Argo CD : http://<adresse dans ${env.ARGOCD_DIR}/server> (utilisateur admin)"""
-                        }
-                    }
-                }
-
-                stage('Approbation : tout détruire') {
-                    when { expression { params.ACTION == 'infra-destroy' } }
-                    steps {
-                        timeout(time: 30, unit: 'MINUTES') {
-                            input message: 'DÉTRUIRE le cluster, les nœuds, le VPC et le dépôt ECR ?', ok: 'Détruire'
-                        }
-                    }
-                }
-
-                stage('Destruction (terraform destroy)') {
-                    when { expression { params.ACTION == 'infra-destroy' } }
-                    steps {
-                        script {
-                            withTf {
-                                sh '''
-                                  if aws eks describe-cluster --name $CLUSTER --region $AWS_REGION >/dev/null 2>&1; then
-                                    aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER
-                                    kubectl -n argocd delete applicationsets,applications --all --timeout=180s || true
-                                    kubectl get ns -o name | grep '^namespace/events-' | xargs -r kubectl delete --timeout=300s || true
-                                    kubectl get svc -A -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.namespace}{" "}{.metadata.name}{"\\n"}{end}' | \
-                                      while read ns name; do kubectl -n $ns delete svc $name --timeout=300s || true; done
-                                    sleep 90
-                                  else
-                                    echo "Aucun cluster : terraform destroy nettoiera seulement ce qui reste dans l'état"
-                                  fi
-                                  cd $TF_DIR
-                                  terraform destroy -input=false -auto-approve
-                                  rm -rf $ARGOCD_DIR
-                                '''
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 
     post {
@@ -742,16 +743,17 @@ appset_only_env    = "${env.APPSET_ENV}"
             archiveArtifacts allowEmptyArchive: true,
                              artifacts: 'trivy-*.txt, .trivyignore, gitleaks-report.json, target/site/jacoco/**, tfplan.txt, trivy-iac.txt'
             script {
-                if (params.ACTION == 'app') {
+                if (params.ACTION in ['app', 'app-infra']) {
                     sh 'docker image rm -f "$IMAGE" >/dev/null 2>&1 || true'
-                } else {
+                }
+                if (params.ACTION != 'app') {
                     sh 'rm -f .kubeconfig platform/terraform/backend_override.tf platform/terraform/lab.auto.tfvars platform/terraform/tfplan || true'
                 }
             }
         }
         success {
             script {
-                if (params.ACTION == 'app') {
+                if (isAppRun()) {
                     if (env.DEPLOY == 'true') {
                         echo "${env.FEATURE_SLUG} deployee : http://${env.APP_HOST}/events/  (Grafana : feature = ${env.K8S_NAMESPACE})"
                     }
@@ -763,7 +765,7 @@ appset_only_env    = "${env.APPSET_ENV}"
         }
         failure {
             script {
-                if (params.ACTION == 'app') {
+                if (isAppRun()) {
                     notifyTeam('FAILURE', 'danger')
                 } else {
                     notifyInfra('danger', "INFRA ${params.ACTION} ÉCHEC  #${env.BUILD_NUMBER}")
@@ -773,7 +775,7 @@ appset_only_env    = "${env.APPSET_ENV}"
         // Build interrompu (timeout, annulation) : avant, aucun e-mail n'etait envoye
         aborted {
             script {
-                if (params.ACTION == 'app') {
+                if (isAppRun()) {
                     notifyTeam('ABORTED', 'warning')
                 } else {
                     notifyInfra('danger', "INFRA ${params.ACTION} ABANDONNÉ  #${env.BUILD_NUMBER}")
@@ -782,7 +784,7 @@ appset_only_env    = "${env.APPSET_ENV}"
         }
         unstable {
             script {
-                if (params.ACTION == 'app') {
+                if (isAppRun()) {
                     notifyTeam('UNSTABLE', 'warning')
                 } else {
                     notifyInfra('danger', "INFRA ${params.ACTION} INSTABLE  #${env.BUILD_NUMBER}")
@@ -795,6 +797,12 @@ appset_only_env    = "${env.APPSET_ENV}"
 // =============================================================================
 //  Fonctions utilitaires - bloc APP (la repartition des features est centralisee ICI)
 // =============================================================================
+
+// Vrai si le pipeline applicatif a effectivement demarre (FEATURE_SLUG est defini au stage Contexte).
+// Sert a choisir le message : app-infra qui echoue pendant Terraform => message INFRA.
+def isAppRun() {
+    return params.ACTION == 'app' || (params.ACTION == 'app-infra' && env.FEATURE_SLUG)
+}
 
 def ownerOf(String branch) {
     def owners = [
