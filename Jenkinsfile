@@ -73,7 +73,7 @@ pipeline {
         // =====================================================================
         stage('CI/CD application') {
             when { expression { params.ACTION == 'app' } }
-            options { timeout(time: 45, unit: 'MINUTES') }
+            options { timeout(time: 90, unit: 'MINUTES') }
             stages {
 
                 // -------------------------------------------------------- 1
