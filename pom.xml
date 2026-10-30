@@ -48,11 +48,14 @@
                 <artifactId>spring-boot-starter-logging</artifactId>
             </exclusion>
         </exclusions>
-        <dependency>
+       
+        </dependency>
+
+         <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-log4j2</artifactId>
         </dependency>
-        </dependency>
+        
         <!-- Observabilité : /actuator/health (probes Kubernetes) et /actuator/prometheus -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
