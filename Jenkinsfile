@@ -347,7 +347,9 @@ export AWS_EC2_METADATA_DISABLED=true
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
 unset AWS_PROFILE AWS_DEFAULT_PROFILE AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE
 cluster=$(terraform -chdir=platform/terraform output -raw eks_cluster_name)
-region=$(terraform -chdir=platform/terraform output -raw region)
+# The bootstrap uses -target, which can leave non-targeted outputs absent from
+# state. AWS_REGION is already required and verified during Terraform init.
+region="${AWS_REGION:?AWS_REGION must be configured}"
 registry=$(terraform -chdir=platform/terraform output -raw ecr_registry)
 aws sts get-caller-identity --region "$region" >/dev/null || { echo 'ERROR: AWS Academy credentials expired before readiness verification.' >&2; exit 1; }
 aws eks wait cluster-active --name "$cluster" --region "$region"
@@ -830,9 +832,15 @@ def slugify(String s) {
 
 def notifyTeam(String status, String color) {
     def msg = "${status} · ${env.FEATURE_SLUG} (#${env.BUILD_NUMBER}) · ${env.OWNER} · ${env.BUILD_URL}"
+    def slackCredentialId = env.SLACK_TOKEN_CREDENTIAL_ID?.trim()
+    if (!slackCredentialId) {
+        echo "Slack notification skipped: SLACK_TOKEN_CREDENTIAL_ID is not configured. ${msg}"
+        return
+    }
     try {
-        slackSend(channel: '#igl5-g2-ci', color: color, message: msg)
-    } catch (Exception ignored) {
-        echo "Notification : ${msg}"
+        slackSend(channel: '#igl5-g2-ci', color: color, message: msg,
+                  tokenCredentialId: slackCredentialId)
+    } catch (Exception exception) {
+        echo "Slack notification failed (${exception.class.simpleName}); build result is unchanged. ${msg}"
     }
 }
