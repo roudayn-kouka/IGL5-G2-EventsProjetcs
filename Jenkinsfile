@@ -84,15 +84,20 @@ pipeline {
                     env.K8S_NAMESPACE = namespaceFor(env.BRANCH_TYPE, env.FEATURE_SLUG)
                     env.ENV_NAME      = env.K8S_NAMESPACE.replaceFirst(/^events-/, '')
                     env.HELM_PROFILE  = profileFor(env.BRANCH_TYPE)
-                    env.LOCAL_DEMO    = params.LOCAL_DEMO ? 'true' : 'false'
-                    env.DEPLOY        = (env.BRANCH_TYPE == 'pr' || params.LOCAL_DEMO) ? 'false' : 'true'
+                    // A multibranch job only learns new declarative parameters after
+                    // it has executed this Jenkinsfile once.  Until then, make this
+                    // known Feedback job safe by bootstrapping to the local path.
+                    // Once Jenkins has registered LOCAL_DEMO, its explicit value wins.
+                    def localDemo = params.containsKey('LOCAL_DEMO') ? params.LOCAL_DEMO : (branch == 'feature/feedback')
+                    env.LOCAL_DEMO    = localDemo ? 'true' : 'false'
+                    env.DEPLOY        = (env.BRANCH_TYPE == 'pr' || localDemo) ? 'false' : 'true'
                     env.SECURITY_GATE = (env.BRANCH_TYPE in ['main', 'release']) ? 'strict' : 'report'
                     env.APP_VERSION   = (env.BRANCH_TYPE == 'main') ? "1.0.${env.BUILD_NUMBER}" : "1.0.0-${env.FEATURE_SLUG}-SNAPSHOT"
                     env.IMAGE_TAG     = "${env.FEATURE_SLUG}-${env.BUILD_NUMBER}-${env.GIT_SHORT}"
-                    env.IMAGE         = params.LOCAL_DEMO ? "${env.APP_NAME}:local-${env.IMAGE_TAG}" : "${env.ECR_REGISTRY ?: 'registry.local'}/${env.APP_NAME}:${env.IMAGE_TAG}"
+                    env.IMAGE         = localDemo ? "${env.APP_NAME}:local-${env.IMAGE_TAG}" : "${env.ECR_REGISTRY ?: 'registry.local'}/${env.APP_NAME}:${env.IMAGE_TAG}"
                     env.SONAR_KEY     = "fst-events-${env.FEATURE_SLUG}"
-                    env.APP_HOST      = params.LOCAL_DEMO ? 'host.docker.internal:9090' : "${env.ENV_NAME}.${env.APPS_DOMAIN ?: 'apps.local'}"
-                    env.DOCKER_WORKSPACE = params.LOCAL_DEMO
+                    env.APP_HOST      = localDemo ? 'host.docker.internal:9090' : "${env.ENV_NAME}.${env.APPS_DOMAIN ?: 'apps.local'}"
+                    env.DOCKER_WORKSPACE = localDemo
                         ? "/var/lib/docker/volumes/events-ci-agent-work/_data${env.WORKSPACE.replaceFirst('^/home/jenkins/agent', '')}"
                         : env.WORKSPACE
 
@@ -189,7 +194,7 @@ pipeline {
 
         // ------------------------------------------------------------ 7
         stage('Publication JAR · Nexus') {
-            when { expression { env.DEPLOY == 'true' || params.LOCAL_DEMO } }
+            when { expression { env.DEPLOY == 'true' || env.LOCAL_DEMO == 'true' } }
             steps {
                 script {
                     def repo = env.APP_VERSION.endsWith('-SNAPSHOT') ? 'maven-snapshots' : 'maven-releases'
@@ -443,7 +448,7 @@ terraform -chdir=platform/terraform apply -input=false -lock-timeout=5m "$plan_f
         }
 
         stage('Image Docker') {
-            when { expression { env.DEPLOY == 'true' || params.LOCAL_DEMO } }
+            when { expression { env.DEPLOY == 'true' || env.LOCAL_DEMO == 'true' } }
             steps {
                 sh '''
                   docker build --pull \
@@ -458,7 +463,7 @@ terraform -chdir=platform/terraform apply -input=false -lock-timeout=5m "$plan_f
 
         // ------------------------------------------------------------ 9
         stage('Scan image · Trivy') {
-            when { expression { env.DEPLOY == 'true' || params.LOCAL_DEMO } }
+            when { expression { env.DEPLOY == 'true' || env.LOCAL_DEMO == 'true' } }
             steps {
                 script {
                     def exitCode = (env.SECURITY_GATE == 'strict') ? '1' : '0'
@@ -470,7 +475,7 @@ terraform -chdir=platform/terraform apply -input=false -lock-timeout=5m "$plan_f
                         --format table --output /reports/trivy-image.txt ${IMAGE}
                     """
                     sh 'cat trivy-image.txt'
-                    if (params.LOCAL_DEMO) {
+                    if (env.LOCAL_DEMO == 'true') {
                         sh 'docker image inspect "$IMAGE" --format "{{.Id}} {{join .RepoTags \",\"}}" > local-image.txt'
                     }
                 }
@@ -479,7 +484,7 @@ terraform -chdir=platform/terraform apply -input=false -lock-timeout=5m "$plan_f
 
         // ------------------------------------------------------------ 10
         stage('Local demo deployment') {
-            when { expression { params.LOCAL_DEMO } }
+            when { expression { env.LOCAL_DEMO == 'true' } }
             steps {
                 withCredentials([string(credentialsId: 'local-demo-mysql-password', variable: 'LOCAL_DEMO_MYSQL_PASSWORD')]) {
                     sh '''#!/usr/bin/env bash
@@ -703,7 +708,7 @@ EOF
 
         // ------------------------------------------------------------ 14
         stage('Tests post-déploiement') {
-            when { expression { env.DEPLOY == 'true' || params.LOCAL_DEMO } }
+            when { expression { env.DEPLOY == 'true' || env.LOCAL_DEMO == 'true' } }
             parallel {
                 stage('Smoke tests') {
                     steps {
@@ -741,7 +746,7 @@ EOF
                     steps {
                         script {
                             def tolerate = (env.SECURITY_GATE == 'strict') ? '' : ' || true'
-                            def target = params.LOCAL_DEMO ? 'http://host.docker.internal:9090/events/' : "http://${env.APP_HOST}/events/"
+                            def target = env.LOCAL_DEMO == 'true' ? 'http://host.docker.internal:9090/events/' : "http://${env.APP_HOST}/events/"
                             sh """#!/usr/bin/env bash
                               set -euo pipefail
                               docker run --rm -v '${env.DOCKER_WORKSPACE}:/zap/wrk:rw' ${ZAP_IMAGE} \\
@@ -788,7 +793,7 @@ EOF
 // protected integration branch. Feature, PR and main jobs retain application CI/CD
 // but cannot create infrastructure merely by changing their Jenkinsfile.
 def terraformProvisioningRequested() {
-    return params.PROVISION_INFRASTRUCTURE && !env.CHANGE_ID && env.BRANCH_TYPE == 'develop'
+    return env.LOCAL_DEMO != 'true' && params.PROVISION_INFRASTRUCTURE && !env.CHANGE_ID && env.BRANCH_TYPE == 'develop'
 }
 
 def ownerOf(String branch) {
