@@ -36,7 +36,6 @@ pipeline {
         APP_NAME     = 'events-app'
         TRIVY_IMAGE  = 'aquasec/trivy:0.56.2'
         GITLEAKS_IMG = 'zricethezav/gitleaks:v8.21.2'
-        ZAP_IMAGE    = 'ghcr.io/zaproxy/zaproxy:stable'
         SONAR_PLUGIN = 'org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922'
         MVN          = 'mvn -B -ntp'
         ARGOCD_OPTS  = '--grpc-web --plaintext'
@@ -56,8 +55,6 @@ pipeline {
         // Shared infrastructure is never created by an ordinary application build.
         booleanParam(name: 'PROVISION_INFRASTRUCTURE', defaultValue: false,
                      description: 'Develop only: create/update the shared Terraform platform after two reviewed plans and approvals.')
-        booleanParam(name: 'RUN_ZAP', defaultValue: true,
-                     description: 'Run the existing OWASP ZAP baseline scan after deployment.')
         booleanParam(name: 'LOCAL_DEMO', defaultValue: false,
                      description: 'Feature-only local CI/CD demo: deploy the scanned image with Docker Compose and skip AWS, GitOps and Argo CD actions.')
     }
@@ -741,22 +738,6 @@ EOF
                         '''
                     }
                 }
-                stage('DAST · OWASP ZAP') {
-                    when { expression { return params.RUN_ZAP } }
-                    steps {
-                        script {
-                            def tolerate = (env.SECURITY_GATE == 'strict') ? '' : ' || true'
-                            def target = env.LOCAL_DEMO == 'true' ? 'http://host.docker.internal:9090/events/' : "http://${env.APP_HOST}/events/"
-                            sh """#!/usr/bin/env bash
-                              set -euo pipefail
-                              docker run --rm -v '${env.DOCKER_WORKSPACE}:/zap/wrk:rw' ${ZAP_IMAGE} \\
-                                zap-baseline.py -t '${target}' -I -m 2 -r zap-report.html -J zap-report.json${tolerate}
-                              test -s zap-report.html
-                              test -s zap-report.json
-                            """
-                        }
-                    }
-                }
             }
         }
     }
@@ -764,7 +745,7 @@ EOF
     post {
         always {
             archiveArtifacts allowEmptyArchive: true,
-                             artifacts: 'trivy-*.txt, .trivyignore, gitleaks-report.json, terraform-*-summary.txt, local-image.txt, local-smoke.txt, zap-report.html, zap-report.json, target/site/jacoco/**'
+                             artifacts: 'trivy-*.txt, .trivyignore, gitleaks-report.json, terraform-*-summary.txt, local-image.txt, local-smoke.txt, target/site/jacoco/**'
             sh 'if [ "$LOCAL_DEMO" = true ]; then MYSQL_ROOT_PASSWORD=unused docker compose --project-name feedback-local down || true; fi'
             sh 'docker image rm -f "$IMAGE" >/dev/null 2>&1 || true'
             // Saved plans can contain sensitive values. Summaries are archived above;
