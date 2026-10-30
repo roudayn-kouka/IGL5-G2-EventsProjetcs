@@ -241,15 +241,25 @@ pipeline {
                     steps {
                         script {
                             def exitCode = (env.SECURITY_GATE == 'strict') ? '1' : '0'
+                            // Pas de montage du workspace : Jenkins tourne dans un conteneur, donc le chemin
+                            // serait resolu cote hote Docker. On passe par docker create / docker cp.
                             sh """
-                              docker run --rm -e TRIVY_DB_REPOSITORY -e TRIVY_JAVA_DB_REPOSITORY \
-                                -v /var/run/docker.sock:/var/run/docker.sock \
-                                -v "\$WORKSPACE:/reports" -v trivy-cache:/root/.cache ${TRIVY_IMAGE} image \
-                                --severity CRITICAL --ignore-unfixed --exit-code ${exitCode} \
-                                --ignorefile /reports/.trivyignore \
-                                --format table --output /reports/trivy-image.txt ${IMAGE}
+                              rm -f trivy-image.txt
+                              touch .trivyignore
+                              CID=\$(docker create -e TRIVY_DB_REPOSITORY -e TRIVY_JAVA_DB_REPOSITORY \\
+                                      -v /var/run/docker.sock:/var/run/docker.sock -v trivy-cache:/root/.cache \\
+                                      ${TRIVY_IMAGE} image --severity CRITICAL --ignore-unfixed --exit-code ${exitCode} \\
+                                      --ignorefile /trivyignore --format table --output /trivy-image.txt ${IMAGE})
+                              docker cp .trivyignore "\$CID:/trivyignore"
+                              set +e
+                              docker start -a "\$CID"
+                              RC=\$?
+                              set -e
+                              docker cp "\$CID:/trivy-image.txt" trivy-image.txt || true
+                              docker rm -v "\$CID" >/dev/null
+                              cat trivy-image.txt
+                              exit \$RC
                             """
-                            sh 'cat trivy-image.txt'
                         }
                     }
                 }
@@ -269,6 +279,10 @@ pipeline {
 
                               aws sts get-caller-identity --region "$AWS_REGION" >/dev/null \
                                 || { echo "Identifiants AWS invalides ou expires : mettez a jour les 3 credentials Jenkins."; exit 1; }
+
+                              # Cree le depot ECR s'il n'existe pas (il disparait a chaque reset du Learner Lab)
+                              aws ecr describe-repositories --region "$AWS_REGION" --repository-names "$APP_NAME" >/dev/null 2>&1 \
+                                || aws ecr create-repository --region "$AWS_REGION" --repository-name "$APP_NAME" >/dev/null
 
                               aws ecr get-login-password --region "$AWS_REGION" \
                                 | docker login --username AWS --password-stdin "$ECR_REGISTRY"
