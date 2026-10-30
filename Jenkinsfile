@@ -27,9 +27,16 @@ pipeline {
     options {
         timestamps()
         ansiColor('xterm')
-        timeout(time: 45, unit: 'MINUTES')
+        timeout(time: 75, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '15', artifactNumToKeepStr: '5'))
         disableConcurrentBuilds()
+    }
+    parameters {
+        booleanParam(
+            name: 'STOP_EKS_AFTER_DEPLOY',
+            defaultValue: false,
+            description: 'Scale EKS workers to zero after successful smoke tests'
+        )
     }
 
     environment {
@@ -277,6 +284,40 @@ pipeline {
             }
         }
 
+        
+
+        stage('EKS · Start workers') {
+            when {
+                expression { env.DO_DEPLOY == 'true' }
+            }
+            steps {
+                withCredentials([
+                    string(credentialsId: 'aws-access-key-id',
+                        variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-secret-access-key',
+                        variable: 'AWS_SECRET_ACCESS_KEY'),
+                    string(credentialsId: 'aws-session-token',
+                        variable: 'AWS_SESSION_TOKEN')
+                ]) {
+                    sh '''
+                        docker image inspect fst-eks-tools:local >/dev/null 2>&1 || \
+                            docker build -t fst-eks-tools:local -f ci/Dockerfile.eks-tools .
+
+                        docker run --rm --volumes-from jenkins \
+                            -w "$WORKSPACE" \
+                            -e AWS_ACCESS_KEY_ID \
+                            -e AWS_SECRET_ACCESS_KEY \
+                            -e AWS_SESSION_TOKEN \
+                            -e AWS_REGION \
+                            fst-eks-tools:local \
+                            sh ci/eks-workers.sh up
+                    '''
+                }
+            }
+        }
+
+
+
         // ------------------------------------------------------------ 14
         stage('Promotion GitOps') {
             when { expression { env.DO_DEPLOY == 'true' } }
@@ -462,6 +503,37 @@ SCRIPT
                 }
             }
         }
+        
+        stage('EKS · Stop workers') {
+            when {
+                expression {
+                    env.DO_DEPLOY == 'true' &&
+                    params.STOP_EKS_AFTER_DEPLOY
+                }
+            }
+            steps {
+                withCredentials([
+                    string(credentialsId: 'aws-access-key-id',
+                        variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-secret-access-key',
+                        variable: 'AWS_SECRET_ACCESS_KEY'),
+                    string(credentialsId: 'aws-session-token',
+                        variable: 'AWS_SESSION_TOKEN')
+                ]) {
+                    sh '''
+                        docker run --rm --volumes-from jenkins \
+                            -w "$WORKSPACE" \
+                            -e AWS_ACCESS_KEY_ID \
+                            -e AWS_SECRET_ACCESS_KEY \
+                            -e AWS_SESSION_TOKEN \
+                            -e AWS_REGION \
+                            fst-eks-tools:local \
+                            sh ci/eks-workers.sh down
+                    '''
+                }
+            }
+        }
+
 
     }
 
