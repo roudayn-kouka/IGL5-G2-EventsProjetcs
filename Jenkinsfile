@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 //  Events Project - FST - IGL5 G2 - Pipeline CI/CD/DevSecOps (GitOps)
 //
 //  UN SEUL Jenkinsfile pour TOUTES les branches (job Jenkins Multibranch Pipeline).
@@ -550,7 +550,7 @@ def notifyTeam(String status, String color) {
 
     // E-mail (toujours actif)
     try {
-        emailext to: 'VOTRE.ADRESSE@gmail.com',
+        emailext to: 'ahlemmastouri234@gmail.com',
                  subject: "[Jenkins] ${status} - ${env.FEATURE_SLUG} #${env.BUILD_NUMBER}",
                  body: msg,
                  attachLog: (status == 'FAILURE')

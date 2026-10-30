@@ -41,7 +41,7 @@ def approve(String msg, String okLabel) {
 // Notification e-mail : l'adresse Gmail vient du credential google-credentials
 def notifyInfra(String status, boolean withLog) {
   try {
-    withCredentials([usernamePassword(credentialsId: 'google-credentials',
+    withCredentials([usernamePassword(credentialsId: 'gmail-credentials',
                                       usernameVariable: 'GMAIL_USER',
                                       passwordVariable: 'GMAIL_PSW')]) {
       emailext from: env.GMAIL_USER,
