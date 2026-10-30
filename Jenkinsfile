@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 //  Events Project - FST - IGL5 G2 - Pipeline CI/CD/DevSecOps (GitOps)
 //
 //  UN SEUL Jenkinsfile pour TOUTES les branches (job Jenkins Multibranch Pipeline).
@@ -268,6 +268,22 @@ pipeline {
                 }
             }
         }
+        // ------------------------------------------------------------ 10c
+stage('Push image - Docker Hub') {
+    when { expression { env.DEPLOY == 'true' } }
+    steps {
+        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials',
+                                          usernameVariable: 'DH_USER', passwordVariable: 'DH_PSW')]) {
+            sh '''
+              set -e
+              echo "$DH_PSW" | docker login -u "$DH_USER" --password-stdin
+              docker tag "$IMAGE" "$DH_USER/$APP_NAME:$IMAGE_TAG"
+              docker push "$DH_USER/$APP_NAME:$IMAGE_TAG"
+              docker logout
+            '''
+        }
+    }
+}
 
         // ------------------------------------------------------------ 11
         stage('Approbation production') {
@@ -531,7 +547,18 @@ def slugify(String s) {
 def notifyTeam(String status, String color) {
     def msg = "${status} - ${env.FEATURE_SLUG} (#${env.BUILD_NUMBER}) - ${env.OWNER} - ${env.BUILD_URL}"
     echo "Notification : ${msg}"
-    // Slack uniquement si active (SLACK_ENABLED=true) ET configure dans Manage Jenkins > System
+
+    // E-mail (toujours actif)
+    try {
+        emailext to: 'VOTRE.ADRESSE@gmail.com',
+                 subject: "[Jenkins] ${status} - ${env.FEATURE_SLUG} #${env.BUILD_NUMBER}",
+                 body: msg,
+                 attachLog: (status == 'FAILURE')
+    } catch (Exception e) {
+        echo "Mail indisponible : ${e.message}"
+    }
+
+    // Slack uniquement si active (SLACK_ENABLED=true)
     if (env.SLACK_ENABLED == 'true') {
         try {
             slackSend(channel: '#igl5-g2-ci', color: color, message: msg)

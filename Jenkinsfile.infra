@@ -1,5 +1,6 @@
 // Job infra : Terraform installe Prometheus + Grafana sur le cluster kind.
 // ACTION = plan-only (defaut) | apply | destroy | import
+// Credentials : kubeconfig-kind (Secret file), google-credentials (Username with password, mot de passe d'application Gmail)
 
 // Terraform dans un conteneur sur le reseau kind, qui partage les volumes de Jenkins
 def tf(String args) {
@@ -34,6 +35,23 @@ def approve(String msg, String okLabel) {
   } catch (err) {
     currentBuild.result = 'ABORTED'
     error('Approbation non donnee dans le delai')
+  }
+}
+
+// Notification e-mail : l'adresse Gmail vient du credential google-credentials
+def notifyInfra(String status, boolean withLog) {
+  try {
+    withCredentials([usernamePassword(credentialsId: 'google-credentials',
+                                      usernameVariable: 'GMAIL_USER',
+                                      passwordVariable: 'GMAIL_PSW')]) {
+      emailext from: env.GMAIL_USER,
+               to: env.GMAIL_USER,
+               subject: "[Infra] ${status} - ${params.ACTION} #${env.BUILD_NUMBER}",
+               body: "Job infra ${status} (${params.ACTION}) : ${env.BUILD_URL}console",
+               attachLog: withLog
+    }
+  } catch (Exception e) {
+    echo "Mail indisponible : ${e.message}"
   }
 }
 
@@ -140,6 +158,12 @@ pipeline {
     always {
       archiveArtifacts artifacts: 'tfplan.txt, trivy-iac.txt', allowEmptyArchive: true
       sh 'rm -f $WORKSPACE/$TF_DIR/.kubeconfig $WORKSPACE/$TF_DIR/tfplan || true'
+    }
+    success {
+      script { notifyInfra('SUCCESS', false) }
+    }
+    failure {
+      script { notifyInfra('FAILURE', true) }
     }
   }
 }
