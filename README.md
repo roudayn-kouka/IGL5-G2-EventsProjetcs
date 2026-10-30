@@ -30,6 +30,7 @@
 - [API REST](#api-rest)
 - [Tests et couverture](#tests-et-couverture)
 - [Pipeline CI/CD · DevSecOps · GitOps](#pipeline-cicd--devsecops--gitops)
+- [Provisionnement Terraform via Jenkins](docs/TERRAFORM-JENKINS.md)
 - [Sécurité](#sécurité)
 - [Structure du projet](#structure-du-projet)
 - [Workflow Git](#workflow-git)

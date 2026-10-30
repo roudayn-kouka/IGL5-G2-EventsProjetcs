@@ -7,16 +7,19 @@ USER root
 COPY --from=build_tools /opt/java/openjdk /opt/java/build-jdk17
 COPY --from=build_tools /usr/share/maven /usr/share/maven
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl git jq unzip docker-cli \
+ && apt-get install -y --no-install-recommends ca-certificates curl git jq unzip docker-cli gnupg lsb-release \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /home/jenkins/.m2 /home/jenkins/agent \
  && chown -R jenkins:jenkins /home/jenkins/.m2 /home/jenkins/agent \
  && usermod -aG root jenkins
 
 
-# Install AWS CLI v2 and Argo CD CLI
+# Install AWS CLI v2, Argo CD CLI, Terraform and kubectl. Terraform and kubectl
+# are needed only by the opt-in, approval-gated infrastructure stages.
 ARG TARGETARCH=amd64
 ARG ARGOCD_VERSION=v3.2.0
+ARG TERRAFORM_VERSION=1.10.5
+ARG KUBECTL_VERSION=v1.34.6
 
 RUN set -eux; \
     case "${TARGETARCH}" in \
@@ -31,8 +34,18 @@ RUN set -eux; \
     curl -fsSL "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-${TARGETARCH}" \
       -o /usr/local/bin/argocd; \
     chmod 755 /usr/local/bin/argocd; \
+    curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg; \
+    . /etc/os-release; \
+    echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com ${VERSION_CODENAME} main" > /etc/apt/sources.list.d/hashicorp.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends terraform="${TERRAFORM_VERSION}-1"; \
+    rm -rf /var/lib/apt/lists/*; \
+    curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl" -o /usr/local/bin/kubectl; \
+    chmod 755 /usr/local/bin/kubectl; \
     aws --version; \
-    argocd version --client
+    argocd version --client; \
+    terraform version; \
+    kubectl version --client
 # Jenkins remoting is launched explicitly with /opt/java/openjdk/bin/java (21).
 # Shell commands and Maven use JDK 17, independent of the remoting JVM.
 ENV JAVA_HOME=/opt/java/build-jdk17 \

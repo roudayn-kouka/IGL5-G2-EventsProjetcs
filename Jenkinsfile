@@ -25,7 +25,9 @@ pipeline {
     options {
         timestamps()
         ansiColor('xterm')
-        timeout(time: 45, unit: 'MINUTES')
+        // EKS creation and node readiness can exceed the CI-only timeout. The Terraform
+        // path remains opt-in and has its own approval gates.
+        timeout(time: 120, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '15', artifactNumToKeepStr: '5'))
         disableConcurrentBuilds()
     }
@@ -38,6 +40,16 @@ pipeline {
         SONAR_PLUGIN = 'org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922'
         MVN          = 'mvn -B -ntp'
         ARGOCD_OPTS  = '--grpc-web --plaintext'
+    }
+
+    parameters {
+        // Shared infrastructure is never created by an ordinary application build.
+        booleanParam(name: 'PROVISION_INFRASTRUCTURE', defaultValue: false,
+                     description: 'Develop only: create/update the shared Terraform platform after two reviewed plans and approvals.')
+        booleanParam(name: 'RUN_ZAP', defaultValue: true,
+                     description: 'Run the existing OWASP ZAP baseline scan after deployment.')
+        booleanParam(name: 'LOCAL_DEMO', defaultValue: false,
+                     description: 'Feature-only local CI/CD demo: deploy the scanned image with Docker Compose and skip AWS, GitOps and Argo CD actions.')
     }
 
     stages {
@@ -62,13 +74,17 @@ pipeline {
                     env.K8S_NAMESPACE = namespaceFor(env.BRANCH_TYPE, env.FEATURE_SLUG)
                     env.ENV_NAME      = env.K8S_NAMESPACE.replaceFirst(/^events-/, '')
                     env.HELM_PROFILE  = profileFor(env.BRANCH_TYPE)
-                    env.DEPLOY        = (env.BRANCH_TYPE == 'pr') ? 'false' : 'true'
+                    env.LOCAL_DEMO    = params.LOCAL_DEMO ? 'true' : 'false'
+                    env.DEPLOY        = (env.BRANCH_TYPE == 'pr' || params.LOCAL_DEMO) ? 'false' : 'true'
                     env.SECURITY_GATE = (env.BRANCH_TYPE in ['main', 'release']) ? 'strict' : 'report'
                     env.APP_VERSION   = (env.BRANCH_TYPE == 'main') ? "1.0.${env.BUILD_NUMBER}" : "1.0.0-${env.FEATURE_SLUG}-SNAPSHOT"
                     env.IMAGE_TAG     = "${env.FEATURE_SLUG}-${env.BUILD_NUMBER}-${env.GIT_SHORT}"
-                    env.IMAGE         = "${env.ECR_REGISTRY ?: 'registry.local'}/${env.APP_NAME}:${env.IMAGE_TAG}"
+                    env.IMAGE         = params.LOCAL_DEMO ? "${env.APP_NAME}:local-${env.IMAGE_TAG}" : "${env.ECR_REGISTRY ?: 'registry.local'}/${env.APP_NAME}:${env.IMAGE_TAG}"
                     env.SONAR_KEY     = "fst-events-${env.FEATURE_SLUG}"
-                    env.APP_HOST      = "${env.ENV_NAME}.${env.APPS_DOMAIN ?: 'apps.local'}"
+                    env.APP_HOST      = params.LOCAL_DEMO ? 'host.docker.internal:9090' : "${env.ENV_NAME}.${env.APPS_DOMAIN ?: 'apps.local'}"
+                    env.DOCKER_WORKSPACE = params.LOCAL_DEMO
+                        ? "/var/lib/docker/volumes/events-ci-agent-work/_data${env.WORKSPACE.replaceFirst('^/home/jenkins/agent', '')}"
+                        : env.WORKSPACE
 
                     currentBuild.displayName = "#${env.BUILD_NUMBER} · ${env.FEATURE_SLUG}"
                     currentBuild.description = "${env.OWNER} · ${env.GIT_SHORT} · ${env.K8S_NAMESPACE}"
@@ -118,7 +134,7 @@ pipeline {
                     steps {
                         // Bloquant partout : un secret commité n'est jamais acceptable
                         sh '''
-                          docker run --rm -v "$WORKSPACE:/repo" $GITLEAKS_IMG detect \
+                          docker run --rm -v "$DOCKER_WORKSPACE:/repo" $GITLEAKS_IMG detect \
                             --source /repo --redact --no-banner \
                             --report-format json --report-path /repo/gitleaks-report.json
                         '''
@@ -127,7 +143,7 @@ pipeline {
                 stage('Dépendances & IaC · Trivy FS') {
                     steps {
                         sh '''
-                          docker run --rm -v "$WORKSPACE:/src" -v trivy-cache:/root/.cache $TRIVY_IMAGE fs \
+                          docker run --rm -v "$DOCKER_WORKSPACE:/src" -v trivy-cache:/root/.cache $TRIVY_IMAGE fs \
                             --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 0 \
                             --format table --output /src/trivy-fs.txt /src
                           cat trivy-fs.txt
@@ -163,7 +179,7 @@ pipeline {
 
         // ------------------------------------------------------------ 7
         stage('Publication JAR · Nexus') {
-            when { expression { env.DEPLOY == 'true' } }
+            when { expression { env.DEPLOY == 'true' || params.LOCAL_DEMO } }
             steps {
                 script {
                     def repo = env.APP_VERSION.endsWith('-SNAPSHOT') ? 'maven-snapshots' : 'maven-releases'
@@ -179,8 +195,245 @@ pipeline {
         }
 
         // ------------------------------------------------------------ 8
+        // A new EKS account cannot plan Kubernetes/Helm resources until the cluster
+        // exists. The repository-owned academy.ps1 uses this same bootstrap split.
+        // These stages are deliberately limited to develop: shared infrastructure is
+        // not owned by a feature branch, and main is never provisioned.
+        stage('Terraform init, fmt & validate') {
+            when {
+                beforeAgent true
+                expression { terraformProvisioningRequested() }
+            }
+            steps {
+                withCredentials([
+                    file(credentialsId: 'aws-academy-credentials', variable: 'AWS_SHARED_CREDENTIALS_FILE'),
+                    file(credentialsId: 'terraform-backend-config', variable: 'TF_BACKEND_CONFIG')
+                ]) {
+                    sh '''#!/usr/bin/env bash
+set +x
+set -euo pipefail
+: "${AWS_REGION:?AWS_REGION must be configured}"
+: "${AWS_SHARED_CREDENTIALS_FILE:?AWS Academy credentials are required}"
+: "${TF_BACKEND_CONFIG:?Terraform backend configuration is required}"
+export AWS_PAGER=''
+export AWS_CONFIG_FILE=/dev/null
+export AWS_EC2_METADATA_DISABLED=true
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
+unset AWS_PROFILE AWS_DEFAULT_PROFILE AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE
+command -v terraform >/dev/null || { echo 'ERROR: Terraform is missing from the Jenkins agent image.' >&2; exit 1; }
+if ! aws sts get-caller-identity --region "$AWS_REGION" >/dev/null; then
+  echo 'ERROR: AWS Academy authentication failed. Refresh aws-academy-credentials and retry.' >&2
+  exit 1
+fi
+terraform -chdir=platform/terraform init -input=false -lockfile=readonly -backend-config="$TF_BACKEND_CONFIG"
+terraform -chdir=platform/terraform fmt -check -recursive
+terraform -chdir=platform/terraform validate
+'''
+                }
+            }
+        }
+
+        stage('Terraform bootstrap plan') {
+            when {
+                beforeAgent true
+                expression { terraformProvisioningRequested() }
+            }
+            steps {
+                withCredentials([
+                    file(credentialsId: 'aws-academy-credentials', variable: 'AWS_SHARED_CREDENTIALS_FILE'),
+                    file(credentialsId: 'terraform-backend-config', variable: 'TF_BACKEND_CONFIG'),
+                    file(credentialsId: 'terraform-tfvars-academy', variable: 'TF_VARS_FILE'),
+                    string(credentialsId: 'grafana-admin-password', variable: 'TF_VAR_grafana_admin_password')
+                ]) {
+                    sh '''#!/usr/bin/env bash
+set +x
+set -euo pipefail
+export AWS_PAGER=''
+export AWS_CONFIG_FILE=/dev/null
+export AWS_EC2_METADATA_DISABLED=true
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
+unset AWS_PROFILE AWS_DEFAULT_PROFILE AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE
+plan_file="$WORKSPACE/.terraform-bootstrap.tfplan"
+summary_file="$WORKSPACE/terraform-bootstrap-summary.txt"
+rm -f -- "$plan_file" "$summary_file"
+terraform -chdir=platform/terraform plan -input=false -lock-timeout=5m \
+  -var-file="$TF_VARS_FILE" \
+  -target=module.eks \
+  -target=aws_ecr_repository.events_app \
+  -target=aws_ecr_lifecycle_policy.events_app \
+  -out="$plan_file"
+terraform -chdir=platform/terraform show -no-color "$plan_file" \
+  | sed -n -E '/^  # /p;/^Plan:/p' | tee "$summary_file"
+if terraform -chdir=platform/terraform show -json "$plan_file" \
+  | jq -e '[.resource_changes[]? | select(.change.actions | index("delete"))] | length > 0' >/dev/null; then
+  echo 'ERROR: Bootstrap plan contains delete/replace actions. Investigation is required; no approval or apply will be offered.' >&2
+  exit 1
+fi
+'''
+                }
+            }
+        }
+
+        stage('Approve Terraform bootstrap') {
+            when {
+                beforeAgent true
+                expression { terraformProvisioningRequested() }
+            }
+            steps {
+                script {
+                    def summary = readFile('terraform-bootstrap-summary.txt').trim()
+                    timeout(time: 20, unit: 'MINUTES') {
+                        input message: "Review the bootstrap Terraform plan in this build.\n\n${summary}\n\nApply this exact EKS/ECR bootstrap plan?",
+                              ok: 'Apply reviewed bootstrap plan'
+                    }
+                }
+            }
+        }
+
+        stage('Terraform bootstrap apply') {
+            when {
+                beforeAgent true
+                expression { terraformProvisioningRequested() }
+            }
+            steps {
+                withCredentials([
+                    file(credentialsId: 'aws-academy-credentials', variable: 'AWS_SHARED_CREDENTIALS_FILE'),
+                    file(credentialsId: 'terraform-tfvars-academy', variable: 'TF_VARS_FILE'),
+                    string(credentialsId: 'grafana-admin-password', variable: 'TF_VAR_grafana_admin_password')
+                ]) {
+                    sh '''#!/usr/bin/env bash
+set +x
+set -euo pipefail
+export AWS_PAGER=''
+export AWS_CONFIG_FILE=/dev/null
+export AWS_EC2_METADATA_DISABLED=true
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
+unset AWS_PROFILE AWS_DEFAULT_PROFILE AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE
+plan_file="$WORKSPACE/.terraform-bootstrap.tfplan"
+test -f "$plan_file" || { echo 'ERROR: Reviewed bootstrap plan is missing; refusing to create a new plan during apply.' >&2; exit 1; }
+terraform -chdir=platform/terraform apply -input=false -lock-timeout=5m "$plan_file"
+'''
+                }
+            }
+        }
+
+        stage('Verify Terraform infrastructure readiness') {
+            options { timeout(time: 25, unit: 'MINUTES') }
+            when {
+                beforeAgent true
+                expression { terraformProvisioningRequested() }
+            }
+            steps {
+                withCredentials([file(credentialsId: 'aws-academy-credentials', variable: 'AWS_SHARED_CREDENTIALS_FILE')]) {
+                    sh '''#!/usr/bin/env bash
+set +x
+set -euo pipefail
+export AWS_PAGER=''
+export AWS_CONFIG_FILE=/dev/null
+export AWS_EC2_METADATA_DISABLED=true
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
+unset AWS_PROFILE AWS_DEFAULT_PROFILE AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE
+cluster=$(terraform -chdir=platform/terraform output -raw eks_cluster_name)
+region=$(terraform -chdir=platform/terraform output -raw region)
+registry=$(terraform -chdir=platform/terraform output -raw ecr_registry)
+aws sts get-caller-identity --region "$region" >/dev/null || { echo 'ERROR: AWS Academy credentials expired before readiness verification.' >&2; exit 1; }
+aws eks wait cluster-active --name "$cluster" --region "$region"
+test "$(aws eks describe-cluster --name "$cluster" --region "$region" --query 'cluster.status' --output text)" = ACTIVE
+nodegroups=$(aws eks list-nodegroups --cluster-name "$cluster" --region "$region" --query 'nodegroups[]' --output text)
+test -n "$nodegroups" || { echo 'ERROR: EKS cluster has no managed node groups.' >&2; exit 1; }
+for nodegroup in $nodegroups; do aws eks wait nodegroup-active --cluster-name "$cluster" --nodegroup-name "$nodegroup" --region "$region"; done
+aws ecr describe-repositories --repository-names events-app --region "$region" --query 'repositories[0].repositoryUri' --output text | grep -Fx "$registry/events-app" >/dev/null
+export KUBECONFIG
+KUBECONFIG=$(mktemp)
+trap 'rm -f -- "$KUBECONFIG"' EXIT
+aws eks update-kubeconfig --name "$cluster" --region "$region" --kubeconfig "$KUBECONFIG" >/dev/null
+kubectl --kubeconfig "$KUBECONFIG" wait --for=condition=Ready nodes --all --timeout=15m
+kubectl --kubeconfig "$KUBECONFIG" get nodes -o wide
+'''
+                }
+            }
+        }
+
+        stage('Terraform platform plan') {
+            when {
+                beforeAgent true
+                expression { terraformProvisioningRequested() }
+            }
+            steps {
+                withCredentials([
+                    file(credentialsId: 'aws-academy-credentials', variable: 'AWS_SHARED_CREDENTIALS_FILE'),
+                    file(credentialsId: 'terraform-tfvars-academy', variable: 'TF_VARS_FILE'),
+                    string(credentialsId: 'grafana-admin-password', variable: 'TF_VAR_grafana_admin_password')
+                ]) {
+                    sh '''#!/usr/bin/env bash
+set +x
+set -euo pipefail
+export AWS_PAGER=''
+export AWS_CONFIG_FILE=/dev/null
+export AWS_EC2_METADATA_DISABLED=true
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
+unset AWS_PROFILE AWS_DEFAULT_PROFILE AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE
+plan_file="$WORKSPACE/.terraform-platform.tfplan"
+summary_file="$WORKSPACE/terraform-platform-summary.txt"
+rm -f -- "$plan_file" "$summary_file"
+terraform -chdir=platform/terraform plan -input=false -lock-timeout=5m -var-file="$TF_VARS_FILE" -out="$plan_file"
+terraform -chdir=platform/terraform show -no-color "$plan_file" \
+  | sed -n -E '/^  # /p;/^Plan:/p' | tee "$summary_file"
+if terraform -chdir=platform/terraform show -json "$plan_file" \
+  | jq -e '[.resource_changes[]? | select(.change.actions | index("delete"))] | length > 0' >/dev/null; then
+  echo 'ERROR: Platform plan contains delete/replace actions. Investigation is required; no approval or apply will be offered.' >&2
+  exit 1
+fi
+'''
+                }
+            }
+        }
+
+        stage('Approve Terraform platform') {
+            when {
+                beforeAgent true
+                expression { terraformProvisioningRequested() }
+            }
+            steps {
+                script {
+                    def summary = readFile('terraform-platform-summary.txt').trim()
+                    timeout(time: 20, unit: 'MINUTES') {
+                        input message: "Review the platform Terraform plan in this build.\n\n${summary}\n\nApply this exact platform plan?",
+                              ok: 'Apply reviewed platform plan'
+                    }
+                }
+            }
+        }
+
+        stage('Terraform platform apply') {
+            when {
+                beforeAgent true
+                expression { terraformProvisioningRequested() }
+            }
+            steps {
+                withCredentials([
+                    file(credentialsId: 'aws-academy-credentials', variable: 'AWS_SHARED_CREDENTIALS_FILE'),
+                    file(credentialsId: 'terraform-tfvars-academy', variable: 'TF_VARS_FILE'),
+                    string(credentialsId: 'grafana-admin-password', variable: 'TF_VAR_grafana_admin_password')
+                ]) {
+                    sh '''#!/usr/bin/env bash
+set +x
+set -euo pipefail
+export AWS_PAGER=''
+export AWS_CONFIG_FILE=/dev/null
+export AWS_EC2_METADATA_DISABLED=true
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
+unset AWS_PROFILE AWS_DEFAULT_PROFILE AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE
+plan_file="$WORKSPACE/.terraform-platform.tfplan"
+test -f "$plan_file" || { echo 'ERROR: Reviewed platform plan is missing; refusing to create a new plan during apply.' >&2; exit 1; }
+terraform -chdir=platform/terraform apply -input=false -lock-timeout=5m "$plan_file"
+'''
+                }
+            }
+        }
+
         stage('Image Docker') {
-            when { expression { env.DEPLOY == 'true' } }
+            when { expression { env.DEPLOY == 'true' || params.LOCAL_DEMO } }
             steps {
                 sh '''
                   docker build --pull \
@@ -195,23 +448,53 @@ pipeline {
 
         // ------------------------------------------------------------ 9
         stage('Scan image · Trivy') {
-            when { expression { env.DEPLOY == 'true' } }
+            when { expression { env.DEPLOY == 'true' || params.LOCAL_DEMO } }
             steps {
                 script {
                     def exitCode = (env.SECURITY_GATE == 'strict') ? '1' : '0'
                     sh """
                       docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-                        -v "\$WORKSPACE:/reports" -v trivy-cache:/root/.cache ${TRIVY_IMAGE} image \
+                        -v "\$DOCKER_WORKSPACE:/reports" -v trivy-cache:/root/.cache ${TRIVY_IMAGE} image \
                         --severity CRITICAL --ignore-unfixed --exit-code ${exitCode} \
                         --ignorefile /reports/.trivyignore \
                         --format table --output /reports/trivy-image.txt ${IMAGE}
                     """
                     sh 'cat trivy-image.txt'
+                    if (params.LOCAL_DEMO) {
+                        sh 'docker image inspect "$IMAGE" --format "{{.Id}} {{join .RepoTags \",\"}}" > local-image.txt'
+                    }
                 }
             }
         }
 
         // ------------------------------------------------------------ 10
+        stage('Local demo deployment') {
+            when { expression { params.LOCAL_DEMO } }
+            steps {
+                withCredentials([string(credentialsId: 'local-demo-mysql-password', variable: 'LOCAL_DEMO_MYSQL_PASSWORD')]) {
+                    sh '''#!/usr/bin/env bash
+set +x
+set -euo pipefail
+env_file=$(mktemp)
+trap 'rm -f -- "$env_file"' EXIT
+printf 'MYSQL_ROOT_PASSWORD=%s\n' "$LOCAL_DEMO_MYSQL_PASSWORD" > "$env_file"
+chmod 600 "$env_file"
+EVENTS_APP_IMAGE="$IMAGE" docker compose --project-name feedback-local --env-file "$env_file" up -d --no-build
+for attempt in $(seq 1 30); do
+  if curl -fsS --max-time 5 http://host.docker.internal:9090/events/actuator/health/readiness >/dev/null; then
+    echo 'Local application is ready.'
+    exit 0
+  fi
+  sleep 2
+done
+echo 'ERROR: Local application did not become ready within 60 seconds.' >&2
+docker compose --project-name feedback-local ps >&2 || true
+exit 1
+'''
+                }
+            }
+        }
+
         stage('Push image · Amazon ECR') {
             when { expression { env.DEPLOY == 'true' } }
             steps {
@@ -410,12 +693,17 @@ EOF
 
         // ------------------------------------------------------------ 14
         stage('Tests post-déploiement') {
-            when { expression { env.DEPLOY == 'true' } }
+            when { expression { env.DEPLOY == 'true' || params.LOCAL_DEMO } }
             parallel {
                 stage('Smoke tests') {
                     steps {
-                        sh '''
+                        sh '''#!/usr/bin/env bash
+                          set -euo pipefail
                           BASE="http://$APP_HOST/events"
+                          if [ "$LOCAL_DEMO" = true ]; then
+                            BASE="http://host.docker.internal:9090/events"
+                          fi
+                          {
                           HEALTH=$(curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "$BASE/actuator/health/readiness")
                           echo "$HEALTH"
                           echo "$HEALTH" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"' || {
@@ -434,14 +722,23 @@ EOF
                               echo "AVERTISSEMENT : endpoint métier $endpoint retourne HTTP $STATUS"
                             fi
                           done
+                          } | tee local-smoke.txt
                         '''
                     }
                 }
                 stage('DAST · OWASP ZAP') {
+                    when { expression { return params.RUN_ZAP } }
                     steps {
                         script {
                             def tolerate = (env.SECURITY_GATE == 'strict') ? '' : ' || true'
-                            sh "docker run --rm ${ZAP_IMAGE} zap-baseline.py -t http://${env.APP_HOST}/events/ -I -m 2${tolerate}"
+                            def target = params.LOCAL_DEMO ? 'http://host.docker.internal:9090/events/' : "http://${env.APP_HOST}/events/"
+                            sh """#!/usr/bin/env bash
+                              set -euo pipefail
+                              docker run --rm -v '${env.DOCKER_WORKSPACE}:/zap/wrk:rw' ${ZAP_IMAGE} \\
+                                zap-baseline.py -t '${target}' -I -m 2 -r zap-report.html -J zap-report.json${tolerate}
+                              test -s zap-report.html
+                              test -s zap-report.json
+                            """
                         }
                     }
                 }
@@ -452,8 +749,12 @@ EOF
     post {
         always {
             archiveArtifacts allowEmptyArchive: true,
-                             artifacts: 'trivy-*.txt, .trivyignore, gitleaks-report.json, target/site/jacoco/**'
+                             artifacts: 'trivy-*.txt, .trivyignore, gitleaks-report.json, terraform-*-summary.txt, local-image.txt, local-smoke.txt, zap-report.html, zap-report.json, target/site/jacoco/**'
+            sh 'if [ "$LOCAL_DEMO" = true ]; then MYSQL_ROOT_PASSWORD=unused docker compose --project-name feedback-local down || true; fi'
             sh 'docker image rm -f "$IMAGE" >/dev/null 2>&1 || true'
+            // Saved plans can contain sensitive values. Summaries are archived above;
+            // the ignored binary plans must not survive the build workspace.
+            sh 'rm -f .terraform-bootstrap.tfplan .terraform-platform.tfplan'
         }
         success {
             script {
@@ -472,6 +773,13 @@ EOF
 // =============================================================================
 //  Fonctions utilitaires — la répartition des features est centralisée ICI
 // =============================================================================
+
+// The shared EKS/ECR/Argo platform is deliberately provisioned only from the
+// protected integration branch. Feature, PR and main jobs retain application CI/CD
+// but cannot create infrastructure merely by changing their Jenkinsfile.
+def terraformProvisioningRequested() {
+    return params.PROVISION_INFRASTRUCTURE && !env.CHANGE_ID && env.BRANCH_TYPE == 'develop'
+}
 
 def ownerOf(String branch) {
     def owners = [
