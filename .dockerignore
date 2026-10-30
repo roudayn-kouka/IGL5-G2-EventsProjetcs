@@ -1,9 +1,7 @@
-# Seul target/*.jar est nécessaire dans le contexte de build
+# Contexte de build minimal : le JAR et le frontend
 *
 !target/*.jar
-platform/
-docs/
+!frontend
 frontend/node_modules
 frontend/dist
 frontend/.angular
-.git
