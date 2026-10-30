@@ -39,12 +39,8 @@ def withTf(Closure body) {
     ]) { body() }
   }
 }
-
 def notify(String color, String text) {
-  // Slack (ignoré s'il n'est pas configuré)
-  try { slackSend(channel: '#igl5-g2-ci', color: color, message: "Ahlem Mastouri : " + text) }
-  catch (e) { echo "Slack non configuré : ${text}" }
-  // E-mail : l'adresse vient du credential google-credentials
+  // E-mail : l'adresse vient du credential gmail-credentials
   try {
     withCredentials([usernamePassword(credentialsId: 'gmail-credentials',
                                       usernameVariable: 'GMAIL_USER', passwordVariable: 'GMAIL_PSW')]) {
@@ -56,7 +52,6 @@ def notify(String color, String text) {
     }
   } catch (e) { echo "E-mail non envoyé : ${e.message}" }
 }
-
 pipeline {
   agent any
 
