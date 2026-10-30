@@ -43,6 +43,16 @@ pipeline {
     }
 
     parameters {
+        // Existing Feedback-job deployment settings are declared here as well as in
+        // Jenkins so Declarative Pipeline does not replace them on its next run.
+        string(name: 'PLATFORM_REPO', defaultValue: 'roudayn-kouka/IGL5-G2-EventsProjetcs',
+               description: 'GitHub repository containing the GitOps branch.')
+        string(name: 'GITOPS_BRANCH', defaultValue: 'gitops',
+               description: 'GitOps branch used only by the cloud promotion stage.')
+        string(name: 'ARGOCD_SERVER', defaultValue: 'events-argocd-tunnel:8080',
+               description: 'Private Argo CD endpoint used only by the cloud synchronization stage.')
+        string(name: 'APPS_DOMAIN', defaultValue: '44.218.144.91.sslip.io',
+               description: 'Application domain used only by the cloud deployment path.')
         // Shared infrastructure is never created by an ordinary application build.
         booleanParam(name: 'PROVISION_INFRASTRUCTURE', defaultValue: false,
                      description: 'Develop only: create/update the shared Terraform platform after two reviewed plans and approvals.')
