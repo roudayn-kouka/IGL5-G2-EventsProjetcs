@@ -1,0 +1,4 @@
+{
+  "action": "cancel only task-created Feedback-connection-check diagnostics",
+  "outcome": "Could not confirm cancellation: TimeoutError"
+}

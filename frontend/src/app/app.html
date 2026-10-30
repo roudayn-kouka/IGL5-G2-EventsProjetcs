@@ -1,0 +1,23 @@
+<div class="shell">
+  <header class="topbar">
+    <a class="brand" routerLink="/dashboard" aria-label="Events Management dashboard">
+      <span class="brand-mark">E</span>
+      <span class="brand-text">
+        <strong>Events</strong>
+        <small>Management</small>
+      </span>
+    </a>
+    <nav aria-label="Main navigation">
+      <a routerLink="/dashboard" routerLinkActive="active" ariaCurrentWhenActive="page">
+        <span class="nav-icon">📊</span> Dashboard
+      </a>
+      <a routerLink="/events" routerLinkActive="active" ariaCurrentWhenActive="page">
+        <span class="nav-icon">📅</span> Events
+      </a>
+    </nav>
+  </header>
+  <main><router-outlet /></main>
+  <footer class="footer">
+    <span>Events Management · Angular 20 + Spring Boot</span>
+  </footer>
+</div>

@@ -1,7 +1,6 @@
 package tn.fst.eventsproject.dto;
 
 import lombok.*;
-import lombok.experimental.FieldDefaults;
 import tn.fst.eventsproject.entities.Tache;
 
 import java.io.Serializable;
@@ -18,32 +17,31 @@ import java.util.Map;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-@FieldDefaults(level = AccessLevel.PRIVATE)
 public class EventStatsDTO implements Serializable {
 
-    int idEvent;
-    String description;
-    LocalDate dateDebut;
-    LocalDate dateFin;
+    private int idEvent;
+    private String description;
+    private LocalDate dateDebut;
+    private LocalDate dateFin;
 
     /** Nombre de jours de l'événement (date de début et date de fin incluses). */
-    long dureeJours;
+    private long dureeJours;
 
     /** Nombre total de participants affectés à l'événement. */
-    int nbParticipants;
+    private int nbParticipants;
 
     /** Répartition des participants par tâche (INVITE, ORGANISATEUR, ...). */
-    Map<Tache, Long> participantsParTache;
+    private Map<Tache, Long> participantsParTache;
 
     /** Nombre total de logistiques liées à l'événement. */
-    int nbLogistics;
+    private int nbLogistics;
 
     /** Nombre de logistiques réservées. */
-    int nbLogisticsReservees;
+    private int nbLogisticsReservees;
 
     /** Coût des logistiques réservées : somme de prixUnit * quantite. */
-    float coutLogistiqueReservee;
+    private float coutLogistiqueReservee;
 
     /** Average feedback rating; zero when no feedback exists. */
-    double averageRating;
+    private double averageRating;
 }

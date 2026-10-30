@@ -6,6 +6,7 @@ import lombok.experimental.FieldDefaults;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import tn.fst.eventsproject.entities.Logistics;
+import tn.fst.eventsproject.dto.LogisticsWriteRequest;
 import tn.fst.eventsproject.services.ILogisticsService;
 
 import java.util.List;
@@ -21,14 +22,14 @@ public class LogisticsController {
     // POST /logistics
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public Logistics add(@RequestBody Logistics logistics) {
-        return logisticsService.addLogistics(logistics);
+    public Logistics add(@RequestBody LogisticsWriteRequest logistics) {
+        return logisticsService.addLogistics(logistics.toEntity());
     }
 
     // PUT /logistics
     @PutMapping
-    public Logistics update(@RequestBody Logistics logistics) {
-        return logisticsService.updateLogistics(logistics);
+    public Logistics update(@RequestBody LogisticsWriteRequest logistics) {
+        return logisticsService.updateLogistics(logistics.toEntity());
     }
 
     // DELETE /logistics/{id}

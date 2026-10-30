@@ -1,0 +1,4 @@
+Groovy parse: PASS
+Jenkins Declarative validator: Jenkinsfile successfully validated.
+Kubernetes ApplicationSet server dry run: PASS
+bash -n: 6 literal shell blocks passed

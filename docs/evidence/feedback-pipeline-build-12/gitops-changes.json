@@ -1,0 +1,24 @@
+{
+  "applicationCommit": "104b0ca3b4389bdb86b6df0dee28c169456df3ae",
+  "gitopsBefore": "095752b18f3398eabaa3e4f99bdb8c9ad9987f85",
+  "gitopsAfter": "025375385b2c957d2f28d09e8c0c0abc5026ccb3",
+  "changedPaths": [
+    "envs/feedback/chart-source-commit.txt",
+    "envs/feedback/chart/.helmignore",
+    "envs/feedback/chart/Chart.yaml",
+    "envs/feedback/chart/templates/_helpers.tpl",
+    "envs/feedback/chart/templates/deployment.yaml",
+    "envs/feedback/chart/templates/hpa.yaml",
+    "envs/feedback/chart/templates/ingress.yaml",
+    "envs/feedback/chart/templates/mysql.yaml",
+    "envs/feedback/chart/templates/secret.yaml",
+    "envs/feedback/chart/templates/service.yaml",
+    "envs/feedback/chart/templates/servicemonitor.yaml",
+    "envs/feedback/chart/values-prod.yaml",
+    "envs/feedback/chart/values-review.yaml",
+    "envs/feedback/chart/values-staging.yaml",
+    "envs/feedback/chart/values.yaml",
+    "envs/feedback/config.json",
+    "envs/feedback/values.yaml"
+  ]
+}

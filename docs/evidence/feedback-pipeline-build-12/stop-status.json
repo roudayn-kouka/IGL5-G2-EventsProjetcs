@@ -1,0 +1,17 @@
+{
+  "recordedAt": "2026-10-29T22:45:31.208026+01:00",
+  "build": 12,
+  "fullFeedbackBuildsStarted": 1,
+  "fullRetriesStarted": 0,
+  "lastReachableBuildStatus": {
+    "building": true,
+    "result": null
+  },
+  "normalStopRequest": "accepted by Jenkins",
+  "finalBuildStatus": "UNCONFIRMED: Jenkins status request timed out after stop request",
+  "zapScan": "NOT DEMONSTRATED: first image unpack stalled before scanner started",
+  "userDecision": "Stop here and document the blocker",
+  "dockerDesktopRestarted": false,
+  "terraformApplyOrDestroyExecuted": false,
+  "pendingDiagnostic": "Feedback-connection-check #2: queued at last reachable observation; do not assume it completed"
+}

@@ -1,0 +1,78 @@
+{
+  "argocd": [
+    {
+      "name": "argocd-application-controller-0",
+      "phase": "Running",
+      "ready": true
+    },
+    {
+      "name": "argocd-applicationset-controller-7cfbdb4966-8995k",
+      "phase": "Running",
+      "ready": true
+    },
+    {
+      "name": "argocd-dex-server-544949f4c-lssc4",
+      "phase": "Running",
+      "ready": true
+    },
+    {
+      "name": "argocd-redis-66669bc4b6-zmkvb",
+      "phase": "Running",
+      "ready": true
+    },
+    {
+      "name": "argocd-repo-server-5ff8f886fd-2mv7t",
+      "phase": "Running",
+      "ready": true
+    },
+    {
+      "name": "argocd-server-c8d869b47-hdqd7",
+      "phase": "Running",
+      "ready": true
+    }
+  ],
+  "monitoring": [
+    {
+      "name": "alertmanager-monitoring-kube-prometheus-alertmanager-0",
+      "phase": "Running",
+      "ready": true
+    },
+    {
+      "name": "monitoring-grafana-5fd5f5b7b7-j9mgh",
+      "phase": "Running",
+      "ready": true
+    },
+    {
+      "name": "monitoring-kube-prometheus-operator-f45486f8f-twvft",
+      "phase": "Running",
+      "ready": true
+    },
+    {
+      "name": "monitoring-kube-state-metrics-76687c5ff9-jwl9v",
+      "phase": "Running",
+      "ready": true
+    },
+    {
+      "name": "monitoring-prometheus-node-exporter-4gl2w",
+      "phase": "Running",
+      "ready": true
+    },
+    {
+      "name": "monitoring-prometheus-node-exporter-srzvm",
+      "phase": "Running",
+      "ready": true
+    },
+    {
+      "name": "prometheus-monitoring-kube-prometheus-prometheus-0",
+      "phase": "Running",
+      "ready": true
+    }
+  ],
+  "ingress-nginx": [
+    {
+      "name": "ingress-nginx-controller-c9886df9c-6526f",
+      "phase": "Running",
+      "ready": true
+    }
+  ]
+}

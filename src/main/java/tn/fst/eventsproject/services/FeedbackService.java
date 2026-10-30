@@ -44,24 +44,47 @@ public class FeedbackService {
 
     @Transactional
     public Feedback createFeedback(int eventId, int participantId, Integer note, String commentaire) {
+        validateRating(note);
+        Event event = loadEvent(eventId);
+        Participant participant = requireAssociatedParticipant(eventId, participantId);
+        requireFinishedEvent(event);
+        if (feedbackRepository.existsByEvent_IdEventAndParticipant_IdPart(eventId, participantId)) {
+            throw duplicateFeedback();
+        }
+        return saveFeedback(event, participant, note, commentaire);
+    }
+
+    private void validateRating(Integer note) {
         if (note == null || note < 1 || note > 5) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rating must be an integer between 1 and 5");
         }
-        Event event = eventRepository.findById(eventId)
+    }
+
+    private Event loadEvent(int eventId) {
+        return eventRepository.findById(eventId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found"));
+    }
+
+    private Participant requireAssociatedParticipant(int eventId, int participantId) {
         Participant participant = participantRepository.findById(participantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Participant not found"));
-        if (participant.getEvents() == null || participant.getEvents().stream()
-                .noneMatch(associated -> associated.getIdEvent() == eventId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Participant is not associated with this event");
+        boolean associated = participant.getEvents() != null && participant.getEvents().stream()
+                .anyMatch(event -> event.getIdEvent() == eventId);
+        if (!associated) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Participant is not associated with this event");
         }
+        return participant;
+    }
+
+    private void requireFinishedEvent(Event event) {
         // dateFin is inclusive: an event ending today has not finished yet.
         if (event.getDateFin() == null || !event.getDateFin().isBefore(LocalDate.now(clock))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Event has not finished");
         }
-        if (feedbackRepository.existsByEvent_IdEventAndParticipant_IdPart(eventId, participantId)) {
-            throw duplicateFeedback();
-        }
+    }
+
+    private Feedback saveFeedback(Event event, Participant participant, Integer note, String commentaire) {
         Feedback feedback = new Feedback();
         feedback.setEvent(event);
         feedback.setParticipant(participant);
@@ -72,17 +95,22 @@ public class FeedbackService {
             // Flush inside this transaction so concurrent duplicates are translated before returning.
             return feedbackRepository.saveAndFlush(feedback);
         } catch (DataIntegrityViolationException exception) {
-            for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
-                if (cause instanceof ConstraintViolationException) {
-                    String constraint = ((ConstraintViolationException) cause).getConstraintName();
-                    if (constraint != null && constraint.toLowerCase(Locale.ROOT)
-                            .contains("uk_feedback_event_participant")) {
-                        throw duplicateFeedback();
-                    }
-                }
+            if (isDuplicateFeedbackConstraint(exception)) {
+                throw duplicateFeedback();
             }
             throw exception;
         }
+    }
+
+    private boolean isDuplicateFeedbackConstraint(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof ConstraintViolationException) {
+                String constraint = ((ConstraintViolationException) cause).getConstraintName();
+                return constraint != null && constraint.toLowerCase(Locale.ROOT)
+                        .contains("uk_feedback_event_participant");
+            }
+        }
+        return false;
     }
 
     public List<Feedback> getFeedbackByEvent(int eventId) {

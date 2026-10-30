@@ -1,0 +1,74 @@
+[
+  {
+    "method": "GET",
+    "path": "/actuator/health/readiness",
+    "status": 200,
+    "response": {
+      "status": "UP"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/feedback/6/1",
+    "status": 201,
+    "response": {
+      "id": 1,
+      "note": 5,
+      "commentaire": "Feedback deployment verification - Jenkins build 12",
+      "date": "2026-10-29T21:23:02.809675721Z",
+      "eventId": 6,
+      "participantId": 1
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/feedback/6/1",
+    "status": 409,
+    "response": {
+      "status": 409,
+      "error": "Conflict",
+      "message": "Participant already reviewed this event"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/feedback/6/1",
+    "status": 400,
+    "response": {
+      "status": 400,
+      "error": "Bad Request",
+      "message": "Invalid request: IDs and rating must be integers; rating must be between 1 and 5"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/feedback/event/6",
+    "status": 200,
+    "response": [
+      {
+        "id": 1,
+        "note": 5,
+        "commentaire": "Feedback deployment verification - Jenkins build 12",
+        "date": "2026-10-29T21:23:02.809676Z",
+        "eventId": 6,
+        "participantId": 1
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/feedback/event/6/moyenne",
+    "status": 200,
+    "response": {
+      "eventId": 6,
+      "averageRating": 5.0,
+      "totalFeedbacks": 1
+    }
+  },
+  {
+    "method": "DELETE",
+    "path": "/feedback/1",
+    "status": 204,
+    "response": null
+  }
+]

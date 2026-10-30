@@ -1,0 +1,9 @@
+{
+  "_class": "org.jenkinsci.plugins.workflow.job.WorkflowRun",
+  "building": true,
+  "duration": 0,
+  "number": 12,
+  "result": null,
+  "timestamp": 1793308524052,
+  "url": "http://127.0.0.1:8083/job/Events-DevOps/job/feature%252Ffeedback/12/"
+}

@@ -1,0 +1,23 @@
+[
+  {
+    "source": "vm/dockerd.log",
+    "matchingLines": [
+      "time=\"2026-10-29T21:25:55.450676643Z\" level=warning msg=\"Error while looking up for image ghcr.io/zaproxy/zaproxy:stable\"",
+      "time=\"2026-10-29T21:30:59.944751217Z\" level=warning msg=\"Error while looking up for image ghcr.io/zaproxy/zaproxy:stable\""
+    ]
+  },
+  {
+    "source": "vm/containerd.log",
+    "matchingLines": []
+  },
+  {
+    "source": "host/com.docker.backend.exe.log",
+    "matchingLines": [
+      "[2026-10-29T21:30:59.658995400Z][com.docker.backend.exe.apiproxy] >> GET /v1.48/containers/json?filters=%7B%22ancestor%22%3A%7B%22ghcr.io%2Fzaproxy%2Fzaproxy%3Astable%22%3Atrue%7D%7D",
+      "[2026-10-29T21:30:59.943940650Z][com.docker.backend.exe.lifecycle-server.apiproxy] >> GET /v1.48/containers/json?filters=%7B%22ancestor%22%3A%7B%22ghcr.io%2Fzaproxy%2Fzaproxy%3Astable%22%3Atrue%7D%7D",
+      "[2026-10-29T21:30:59.944751217Z][com.docker.backend.exe.dockerd][W] Error while looking up for image ghcr.io/zaproxy/zaproxy:stable",
+      "[2026-10-29T21:30:59.945097307Z][com.docker.backend.exe.lifecycle-server.apiproxy] << GET /v1.48/containers/json?filters=%7B%22ancestor%22%3A%7B%22ghcr.io%2Fzaproxy%2Fzaproxy%3Astable%22%3Atrue%7D%7D (1.158241ms)",
+      "[2026-10-29T21:30:59.665136700Z][com.docker.backend.exe.apiproxy] << GET /v1.48/containers/json?filters=%7B%22ancestor%22%3A%7B%22ghcr.io%2Fzaproxy%2Fzaproxy%3Astable%22%3Atrue%7D%7D (6.1413ms)"
+    ]
+  }
+]

@@ -20,6 +20,7 @@ import tn.fst.eventsproject.repositories.LogisticsRepository;
 import tn.fst.eventsproject.repositories.ParticipantRepository;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.Collections;
@@ -65,7 +66,8 @@ public class EventStatsServiceImpl implements IEventStatsService {
 
     @Override
     public List<EventStatsDTO> getUpcomingEventsStats() {
-        return eventRepository.findByDateDebutGreaterThanEqualOrderByDateDebutAsc(LocalDate.now())
+        return eventRepository.findByDateDebutGreaterThanEqualOrderByDateDebutAsc(
+                        LocalDate.now(ZoneId.systemDefault()))
                 .stream()
                 .map(this::buildStats)
                 .collect(Collectors.toList());
@@ -97,7 +99,8 @@ public class EventStatsServiceImpl implements IEventStatsService {
         return GlobalStatsDTO.builder()
                 .nbEvents(eventRepository.count())
                 .nbEventsAVenir(eventRepository
-                        .findByDateDebutGreaterThanEqualOrderByDateDebutAsc(LocalDate.now()).size())
+                        .findByDateDebutGreaterThanEqualOrderByDateDebutAsc(
+                                LocalDate.now(ZoneId.systemDefault())).size())
                 .nbParticipants(participantRepository.count())
                 .nbLogistics(nbLogistics)
                 .nbLogisticsReservees(reservees.size())

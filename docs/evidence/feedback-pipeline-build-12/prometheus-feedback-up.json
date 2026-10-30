@@ -1,0 +1,27 @@
+{
+  "query": "up{namespace=\"events-feedback\"}",
+  "response": {
+    "status": "success",
+    "data": {
+      "resultType": "vector",
+      "result": [
+        {
+          "metric": {
+            "__name__": "up",
+            "container": "events-app",
+            "endpoint": "http",
+            "instance": "10.20.11.34:8089",
+            "job": "events-app",
+            "namespace": "events-feedback",
+            "pod": "events-app-6dcd6bf9b7-z8q8q",
+            "service": "events-app"
+          },
+          "value": [
+            1793309043.692,
+            "1"
+          ]
+        }
+      ]
+    }
+  }
+}

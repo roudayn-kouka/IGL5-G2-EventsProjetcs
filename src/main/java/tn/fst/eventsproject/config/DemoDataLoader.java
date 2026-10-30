@@ -15,6 +15,7 @@ import tn.fst.eventsproject.repositories.LogisticsRepository;
 import tn.fst.eventsproject.repositories.ParticipantRepository;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.HashSet;
 
@@ -42,7 +43,7 @@ public class DemoDataLoader implements CommandLineRunner {
             log.info("Données déjà présentes : aucune donnée de démo insérée");
             return;
         }
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(ZoneId.systemDefault());
 
         Event jpo = event("Journée Portes Ouvertes FST", today.plusDays(5), today.plusDays(5),
                 logistique("Chaises", true, 2.5f, 300), logistique("Stands", true, 120f, 12),

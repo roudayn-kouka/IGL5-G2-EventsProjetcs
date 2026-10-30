@@ -1,0 +1,88 @@
+{
+  "observedAt": "2026-10-29T21:23:18.738675+00:00",
+  "argo": {
+    "name": "events-feedback",
+    "namespace": "events-feedback",
+    "sources": [
+      {
+        "helm": {
+          "valueFiles": [
+            "values-review.yaml",
+            "../values.yaml"
+          ]
+        },
+        "path": "envs/feedback/chart",
+        "repoURL": "https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git",
+        "targetRevision": "gitops"
+      }
+    ],
+    "sync": "Synced",
+    "revisions": [
+      "025375385b2c957d2f28d09e8c0c0abc5026ccb3"
+    ],
+    "health": "Healthy",
+    "conditions": []
+  },
+  "pods": [
+    {
+      "name": "events-app-6dcd6bf9b7-z8q8q",
+      "node": "ip-10-20-11-192.ec2.internal",
+      "phase": "Running",
+      "containers": [
+        {
+          "name": "events-app",
+          "ready": true,
+          "restarts": 0,
+          "image": "471112616916.dkr.ecr.us-east-1.amazonaws.com/events-app:feedback-12-104b0ca",
+          "imageID": "471112616916.dkr.ecr.us-east-1.amazonaws.com/events-app@sha256:5182b814ce262bf1eab1fba12ac0969bcb2398684ea6382f4002901b8ce5345e"
+        }
+      ]
+    },
+    {
+      "name": "mysql-64fbc7b5cc-xrlnh",
+      "node": "ip-10-20-11-192.ec2.internal",
+      "phase": "Running",
+      "containers": [
+        {
+          "name": "mysql",
+          "ready": true,
+          "restarts": 0,
+          "image": "docker.io/library/mysql:8.0",
+          "imageID": "docker.io/library/mysql@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b"
+        }
+      ]
+    }
+  ],
+  "deployments": [
+    {
+      "name": "events-app",
+      "replicas": 1,
+      "readyReplicas": 1,
+      "availableReplicas": 1
+    },
+    {
+      "name": "mysql",
+      "replicas": 1,
+      "readyReplicas": 1,
+      "availableReplicas": 1
+    }
+  ],
+  "ingress": [
+    {
+      "name": "events-app",
+      "hosts": [
+        "feedback.44.218.144.91.sslip.io"
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "ip-10-20-10-198.ec2.internal",
+      "ready": true
+    },
+    {
+      "name": "ip-10-20-11-192.ec2.internal",
+      "ready": true
+    }
+  ]
+}

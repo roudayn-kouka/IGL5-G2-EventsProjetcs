@@ -1,0 +1,122 @@
+[
+  {
+    "id": "157",
+    "name": "Smoke tests",
+    "error": null
+  },
+  {
+    "id": "154",
+    "name": "Branch: Smoke tests",
+    "error": null
+  },
+  {
+    "id": "151",
+    "name": "Tests post-d\u00e9ploiement",
+    "error": null
+  },
+  {
+    "id": "142",
+    "name": "Synchronisation Argo CD",
+    "error": null
+  },
+  {
+    "id": "133",
+    "name": "Promotion GitOps",
+    "error": null
+  },
+  {
+    "id": "128",
+    "name": "Approbation production",
+    "error": null
+  },
+  {
+    "id": "118",
+    "name": "Authenticate and push to ECR",
+    "error": null
+  },
+  {
+    "id": "111",
+    "name": "Push image \u00b7 Amazon ECR",
+    "error": null
+  },
+  {
+    "id": "101",
+    "name": "Scan image \u00b7 Trivy",
+    "error": null
+  },
+  {
+    "id": "96",
+    "name": "Image Docker",
+    "error": null
+  },
+  {
+    "id": "83",
+    "name": "Publication JAR \u00b7 Nexus",
+    "error": null
+  },
+  {
+    "id": "74",
+    "name": "Quality Gate",
+    "error": null
+  },
+  {
+    "id": "65",
+    "name": "Analyse SonarQube",
+    "error": null
+  },
+  {
+    "id": "50",
+    "name": "Secrets \u00b7 Gitleaks",
+    "error": null
+  },
+  {
+    "id": "47",
+    "name": "Branch: Secrets \u00b7 Gitleaks",
+    "error": null
+  },
+  {
+    "id": "44",
+    "name": "S\u00e9curit\u00e9 du code",
+    "error": null
+  },
+  {
+    "id": "37",
+    "name": "Tests & couverture",
+    "error": null
+  },
+  {
+    "id": "31",
+    "name": "Build Maven",
+    "error": null
+  },
+  {
+    "id": "21",
+    "name": "Contexte & garde GitFlow",
+    "error": null
+  },
+  {
+    "id": "6",
+    "name": "Declarative: Checkout SCM",
+    "error": null
+  },
+  {
+    "id": "52",
+    "name": "D\u00e9pendances & IaC \u00b7 Trivy FS",
+    "error": null
+  },
+  {
+    "id": "48",
+    "name": "Branch: D\u00e9pendances & IaC \u00b7 Trivy FS",
+    "error": null
+  },
+  {
+    "id": "159",
+    "name": "DAST \u00b7 OWASP ZAP",
+    "error": null
+  },
+  {
+    "id": "155",
+    "name": "Branch: DAST \u00b7 OWASP ZAP",
+    "error": null
+  }
+]

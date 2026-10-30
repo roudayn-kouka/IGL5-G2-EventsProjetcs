@@ -3,7 +3,9 @@ package tn.fst.eventsproject.services;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import tn.fst.eventsproject.entities.Event;
 import tn.fst.eventsproject.entities.Logistics;
 import tn.fst.eventsproject.entities.Participant;
@@ -33,7 +35,8 @@ public class EventServicesImpl implements IEventServices{
 
     @Override
     public Event addAffectEvenParticipant(Event event, int idParticipant) {
-        Participant participant = participantRepository.findById(idParticipant).orElse(null);
+        Participant participant = participantRepository.findById(idParticipant)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Participant not found"));
         if(participant.getEvents() == null){
             Set<Event> events = new HashSet<>();
             events.add(event);
@@ -47,8 +50,12 @@ public class EventServicesImpl implements IEventServices{
     @Override
     public Event addAffectEvenParticipant(Event event) {
         Set<Participant> participants = event.getParticipants();
+        if (participants == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Event participants are required");
+        }
         for(Participant aParticipant:participants){
-            Participant participant = participantRepository.findById(aParticipant.getIdPart()).orElse(null);
+            Participant participant = participantRepository.findById(aParticipant.getIdPart())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Participant not found"));
             if(participant.getEvents() == null){
                 Set<Event> events = new HashSet<>();
                 events.add(event);
@@ -76,14 +83,13 @@ public class EventServicesImpl implements IEventServices{
     }
 
     @Override
-    public List<Logistics> getLogisticsDates(LocalDate date_debut, LocalDate date_fin) {
-        List<Event> events = eventRepository.findByDateDebutBetween(date_debut, date_fin);
+    public List<Logistics> getLogisticsDates(LocalDate dateDebut, LocalDate dateFin) {
+        List<Event> events = eventRepository.findByDateDebutBetween(dateDebut, dateFin);
 
         List<Logistics> logisticsList = new ArrayList<>();
         for (Event event:events){
             if(event.getLogistics().isEmpty()){
-
-                return null;
+                continue;
             }
 
             else {
@@ -101,7 +107,6 @@ public class EventServicesImpl implements IEventServices{
     @Override
     public void calculCout() {
         List<Event> events = eventRepository.findByParticipants_NomAndParticipants_PrenomAndParticipants_Tache("Tounsi","Ahmed", Tache.ORGANISATEUR);
-    // eventRepository.findAll();
         for(Event event:events){
             float somme = 0f; // remis à zéro pour chaque événement
             log.info(event.getDescription());

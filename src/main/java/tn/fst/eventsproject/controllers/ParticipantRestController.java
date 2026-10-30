@@ -3,6 +3,7 @@ package tn.fst.eventsproject.controllers;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import tn.fst.eventsproject.entities.Participant;
+import tn.fst.eventsproject.dto.ParticipantWriteRequest;
 import tn.fst.eventsproject.entities.Tache;
 import tn.fst.eventsproject.services.IParticipantServices;
 
@@ -16,8 +17,8 @@ public class ParticipantRestController {
     private final IParticipantServices participantServices;
 
     @PostMapping("/add")
-    public Participant addParticipant(@RequestBody Participant participant) {
-        return participantServices.addParticipant(participant);
+    public Participant addParticipant(@RequestBody ParticipantWriteRequest participant) {
+        return participantServices.addParticipant(participant.toEntity());
     }
 
     @GetMapping("/all")
@@ -32,8 +33,8 @@ public class ParticipantRestController {
 
     @PutMapping("/update/{id}")
     public Participant updateParticipant(@PathVariable("id") int idPart,
-                                         @RequestBody Participant participant) {
-        return participantServices.updateParticipant(idPart, participant);
+                                         @RequestBody ParticipantWriteRequest participant) {
+        return participantServices.updateParticipant(idPart, participant.toEntity());
     }
 
     @PutMapping("/{id}/tache/{tache}")

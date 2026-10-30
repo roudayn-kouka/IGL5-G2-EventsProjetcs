@@ -99,9 +99,10 @@ class ParticipantServicesImplMockitoTest {
     @Test
     void updateParticipant_notFound_shouldThrowAndNotSave() {
         when(participantRepository.findById(99)).thenReturn(Optional.empty());
+        Participant changes = new Participant();
 
         assertThrows(ResponseStatusException.class,
-                () -> service.updateParticipant(99, new Participant()));
+                () -> service.updateParticipant(99, changes));
 
         verify(participantRepository, never()).save(any());
     }

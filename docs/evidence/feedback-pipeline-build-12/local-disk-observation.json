@@ -1,0 +1,9 @@
+{
+  "observedAt": "2026-10-29T22:39:03.8032491+01:00",
+  "drive": "C:",
+  "freeBytes": 2958426112,
+  "note": "ZAP first image unpack pending; low physical Windows disk space observed. No unrelated files or images deleted.",
+  "initialObservedFreeGB": 1.0,
+  "laterObservedFreeGB": 3.2,
+  "causeQualification": "Low physical disk space is a suspected contributor; no explicit ENOSPC recorded."
+}

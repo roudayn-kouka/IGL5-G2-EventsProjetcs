@@ -1,0 +1,18 @@
+{
+  "before": {
+    "main": "32a32c3ba775d590d1571ccda31c7b23ab0638d2",
+    "develop": "0de668517dae87a6a254268fa84837bd2f49c281"
+  },
+  "observedRemote": {
+    "refs/heads/develop": "0de668517dae87a6a254268fa84837bd2f49c281",
+    "refs/heads/feature/feedback": "104b0ca3b4389bdb86b6df0dee28c169456df3ae",
+    "refs/heads/gitops": "025375385b2c957d2f28d09e8c0c0abc5026ccb3",
+    "refs/heads/main": "ed44b7e673bae030113db244fafb48a81c5f493e"
+  },
+  "localMain": "32a32c3ba775d590d1571ccda31c7b23ab0638d2",
+  "ourPushTargets": [
+    "refs/heads/feature/feedback",
+    "refs/heads/gitops (envs/feedback only)"
+  ],
+  "note": "Remote main advanced during the task outside the pushes performed here. Do not reset or overwrite it."
+}
