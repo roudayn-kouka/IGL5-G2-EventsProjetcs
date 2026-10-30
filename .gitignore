@@ -47,6 +47,10 @@ platform/ansible/group_vars/devops/vault.yml
 platform/ansible/group_vars/devops/vault.yml.dec
 **/*.vault.dec
 platform/ansible/group_vars/devops/runtime.yml
+# Générés par Terraform (ansible-handoff.tf) avec l'IP, le compte et la région réels :
+# versionnés, ils étaient remis aux valeurs d'exemple par git stash/checkout (voir *.example)
+platform/ansible/group_vars/devops/terraform.yml
+platform/ansible/inventory/hosts.ini
 *.retry
 
 ### Rapports et journaux générés ###
@@ -57,3 +61,5 @@ gitleaks-report.json
 # Secrets et sauvegardes locales Ansible
 platform/ansible/.vault_pass
 platform/ansible/roles/sonar_config/tasks/main.yml.bak
+# Copies chiffrées du Vault faites par platform/scripts/vault-set.sh
+platform/ansible/.vault-backups/

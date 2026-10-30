@@ -23,7 +23,13 @@ case "$1 $2" in
   "version --client") echo "argocd: v2.13.3+fake" ;;
   "account get-user-info") [ "${FAKE_AUTH:-ok}" = ok ] && echo '{"loggedIn":true,"username":"jenkins"}' \
        || { echo "rpc error: code = Unauthenticated desc = invalid session" >&2; exit 20; } ;;
-  "app get") jq --arg b "${FAKE_VALUES_BRANCH:-gitops}" '.spec.sources[1].targetRevision = $b' "$FIXTURE" ;;
+  "app get")
+    case "${FAKE_APP_GET:-ok}" in
+      denied)   echo "rpc error: code = PermissionDenied desc = permission denied: projects, get, events, sub: jenkins" >&2; exit 20 ;;
+      notfound) echo "rpc error: code = NotFound desc = applications.argoproj.io \"$3\" not found" >&2; exit 20 ;;
+      *) jq --arg b "${FAKE_VALUES_BRANCH:-gitops}" --arg c "${FAKE_CHART_BRANCH:-gitops}" \
+           '.spec.sources[1].targetRevision = $b | .spec.sources[0].targetRevision = $c' "$FIXTURE" ;;
+    esac ;;
 esac
 EOF
 chmod +x "$T/bin/"*
@@ -53,6 +59,9 @@ run "namespace incohérent"                      1 "Namespace" K8S_NAMESPACE=eve
 run "dépôt ECR absent"                          1 "Dépôt ECR events-app inaccessible" FAKE_ECR=absent
 run "jeton Argo CD refusé"                      1 "erreur AUTHENTIFICATION" FAKE_AUTH=refuse
 run "Argo CD lit les valeurs sur main"          1 "lit les valeurs sur .*@main" FAKE_VALUES_BRANCH=main
+run "chart sur main, valeurs sur gitops (2.13)"   1 "refuse deux révisions du même dépôt" FAKE_CHART_BRANCH=main
+run "lecture Application refusée (RBAC)"         1 "erreur AUTORISATION" FAKE_APP_GET=denied
+run "Application absente : toléré"              0 "Prérequis de déploiement vérifiés" FAKE_APP_GET=notfound
 
 printf '\n%s réussi(s), %s échoué(s)\n' "$pass" "$fail"
 (( fail == 0 ))

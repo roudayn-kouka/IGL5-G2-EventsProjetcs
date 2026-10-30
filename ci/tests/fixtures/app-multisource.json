@@ -15,14 +15,14 @@
             "$values/envs/staging/values.yaml"
           ]
         },
-        "path": "platform/gitops/charts/events-app",
+        "path": "envs/staging/chart",
         "repoURL": "https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git",
-        "targetRevision": "main"
+        "targetRevision": "gitops"
       },
       {
         "ref": "values",
         "repoURL": "https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git",
-        "targetRevision": "main"
+        "targetRevision": "gitops"
       }
     ],
     "destination": {

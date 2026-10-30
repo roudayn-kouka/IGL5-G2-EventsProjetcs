@@ -38,12 +38,15 @@ spec:
         notifications.argoproj.io/subscribe.on-health-degraded.slack: igl5-g2-deploiements
     spec:
       project: events
-      # Deux sources : le chart suit le code (main), les valeurs suivent les promotions
-      # (gitops). .status.sync.revisions suit cet ordre ; Jenkins compare la source « values ».
+      # Deux sources, MÊME révision (gitops) : Argo CD 2.13 refuse qu'une source $values lise
+      # le dépôt du chart à une autre révision (« cannot reference a different revision of
+      # the same repository »). Jenkins copie donc le chart du commit construit dans
+      # envs/<env>/chart à chaque promotion : chaque environnement déploie SON chart.
+      # .status.sync.revisions suit cet ordre ; Jenkins compare la source « values ».
       sources:
         - repoURL: https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git
-          targetRevision: main
-          path: platform/gitops/charts/events-app
+          targetRevision: gitops
+          path: 'envs/{{.path.basename}}/chart'
           helm:
             valueFiles:
               - 'values-{{.profile}}.yaml'

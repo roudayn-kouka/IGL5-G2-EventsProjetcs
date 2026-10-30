@@ -82,10 +82,17 @@ printf 'Argo CD : connecté en tant que %s sur %s\n' "$(jq -r '.username' <<<"$u
 
 # --- Argo CD lit-il bien la branche où Jenkins va pousser ? --------------------------
 # (Une Application existante suffit : toutes viennent du même ApplicationSet.)
+# Seule l'absence de l'Application est tolérée (nouvel environnement) ; un refus de droits
+# ou une erreur réseau ferait échouer l'étape 13 : on l'arrête ici, explicitement.
 for app in "events-$ENV_NAME" events-staging; do
-  if app_json="$(argocd app get "$app" -o json 2>/dev/null)"; then
+  if app_json="$(argocd app get "$app" -o json 2>"${TMPDIR:-/tmp}/argocd-app.err")"; then
     argocd_check_values_source "$app_json" "$app" || exit 1
     break
   fi
+  app_err="$(cat "${TMPDIR:-/tmp}/argocd-app.err")"
+  case "$app_err" in
+    *"NotFound"*|*"not found"*) continue ;;
+    *) argocd_explain "$app_err"; exit 1 ;;
+  esac
 done
 echo "Prérequis de déploiement vérifiés."
