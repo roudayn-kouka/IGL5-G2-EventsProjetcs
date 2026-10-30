@@ -1,16 +1,16 @@
 // Job infra : Terraform installe Prometheus + Grafana sur le cluster kind.
-// ACTION = plan-only (defaut, ne change rien) | apply | destroy
+// ACTION = plan-only (defaut) | apply | destroy | import
 
-// Terraform dans un conteneur qui partage les volumes du conteneur Jenkins
-// (le workspace /var/jenkins_home/... est alors visible, sans chemin hote).
+// Terraform dans un conteneur sur le reseau kind, qui partage les volumes de Jenkins
 def tf(String args) {
   sh """
     docker run --rm \
+      --network kind \
       --volumes-from jenkins \
       -v tfstate:/state \
       -w ${env.WORKSPACE}/${env.TF_DIR} \
-      --add-host host.docker.internal:host-gateway \
       -e TF_IN_AUTOMATION=true \
+      -e TF_PLUGIN_CACHE_DIR=/state/plugin-cache \
       -e TF_VAR_kubeconfig_path=${env.WORKSPACE}/${env.TF_DIR}/.kubeconfig \
       hashicorp/terraform:1.9.8 ${args}
   """
@@ -25,6 +25,18 @@ def withKube(Closure body) {
   }
 }
 
+// Approbation : ABORTED (et non echec) si personne ne clique dans le delai
+def approve(String msg, String okLabel) {
+  try {
+    timeout(time: 30, unit: 'MINUTES') {
+      input message: msg, ok: okLabel
+    }
+  } catch (err) {
+    currentBuild.result = 'ABORTED'
+    error('Approbation non donnee dans le delai')
+  }
+}
+
 pipeline {
   agent any
 
@@ -32,12 +44,12 @@ pipeline {
     timestamps()
     disableConcurrentBuilds()
     buildDiscarder(logRotator(numToKeepStr: '10'))
-    timeout(time: 45, unit: 'MINUTES')
+    timeout(time: 60, unit: 'MINUTES')
   }
 
   parameters {
-    choice(name: 'ACTION', choices: ['plan-only', 'apply', 'destroy'],
-           description: 'plan-only = rien ne change | apply = installe Prometheus + Grafana | destroy = les supprime')
+    choice(name: 'ACTION', choices: ['plan-only', 'apply', 'destroy', 'import'],
+           description: 'plan-only = rien ne change | apply = installe | destroy = supprime | import = rattache la release existante au state')
   }
 
   environment {
@@ -50,6 +62,7 @@ pipeline {
     stage('Terraform setup') {
       steps {
         script {
+          sh 'docker run --rm -v tfstate:/state alpine mkdir -p /state/plugin-cache'
           tf('fmt -check -recursive')
           tf('init -input=false -reconfigure -backend-config=path=/state/events-monitoring.tfstate')
           tf('validate')
@@ -58,6 +71,18 @@ pipeline {
           docker run --rm --volumes-from jenkins $TRIVY_IMG config \
             --severity HIGH,CRITICAL --exit-code 0 --format table "$WORKSPACE/$TF_DIR" | tee trivy-iac.txt
         '''
+      }
+    }
+
+    stage('Terraform import') {
+      when { expression { params.ACTION == 'import' } }
+      steps {
+        script {
+          withKube {
+            tf('import -input=false kubernetes_namespace.monitoring monitoring')
+            tf('import -input=false helm_release.monitoring monitoring/monitoring')
+          }
+        }
       }
     }
 
@@ -73,15 +98,14 @@ pipeline {
             '''
           }
         }
+        archiveArtifacts artifacts: 'tfplan.txt', allowEmptyArchive: true
       }
     }
 
     stage('Approbation : installer le monitoring') {
       when { expression { params.ACTION == 'apply' } }
       steps {
-        timeout(time: 30, unit: 'MINUTES') {
-          input message: 'Installer Prometheus + Grafana ? (lis tfplan.txt dans les artefacts)', ok: 'Installer'
-        }
+        script { approve('Installer Prometheus + Grafana ? (plan dans la console et tfplan.txt)', 'Installer') }
       }
     }
 
@@ -98,9 +122,7 @@ pipeline {
     stage('Approbation : detruire le monitoring') {
       when { expression { params.ACTION == 'destroy' } }
       steps {
-        timeout(time: 30, unit: 'MINUTES') {
-          input message: 'Supprimer Prometheus + Grafana ?', ok: 'Detruire'
-        }
+        script { approve('Supprimer Prometheus + Grafana ?', 'Detruire') }
       }
     }
 
