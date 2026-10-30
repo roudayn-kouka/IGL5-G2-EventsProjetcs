@@ -54,6 +54,8 @@ pipeline {
                description: 'Application domain used only by the cloud deployment path.')
         string(name: 'SMOKE_ELB_HOST', defaultValue: '',
                description: 'Cloud smoke tests only: current ingress controller ELB DNS name. APP_HOST remains the HTTP Host header for NGINX routing.')
+        string(name: 'EMAIL_RECIPIENTS', defaultValue: '',
+               description: 'Optional comma-separated recipients for Jenkins build notifications. Leave empty to skip email.')
         // Shared infrastructure is never created by an ordinary application build.
         booleanParam(name: 'PROVISION_INFRASTRUCTURE', defaultValue: false,
                      description: 'Develop or approved feature/feedback only: create/update the shared Terraform platform after two reviewed plans and approvals.')
@@ -793,11 +795,27 @@ EOF
                 if (env.DEPLOY == 'true') {
                     echo "${env.FEATURE_SLUG} déployée : http://${env.APP_HOST}/events/  (Grafana : feature = ${env.K8S_NAMESPACE})"
                 }
+                if (env.EMAIL_RECOVERY_SENT == 'true') {
+                    echo 'Email SUCCESS skipped: this recovered build already sent a FIXED notification.'
+                } else {
+                    notifyBuildEmail('SUCCESS', 'The pipeline completed successfully.')
+                }
                 notifyTeam('SUCCESS', 'good')
             }
         }
+        fixed {
+            script {
+                // Declarative post runs fixed before success. Record this so a recovered
+                // build receives exactly one email notification: FIXED, not SUCCESS too.
+                env.EMAIL_RECOVERY_SENT = 'true'
+                notifyBuildEmail('FIXED', 'The pipeline recovered after a previously unsuccessful build.')
+            }
+        }
         failure {
-            script { notifyTeam('FAILURE', 'danger') }
+            script {
+                notifyBuildEmail('FAILURE', 'The pipeline failed. Review the Jenkins log for the failing stage.')
+                notifyTeam('FAILURE', 'danger')
+            }
         }
     }
 }
@@ -875,5 +893,34 @@ def notifyTeam(String status, String color) {
                   tokenCredentialId: slackCredentialId)
     } catch (Exception exception) {
         echo "Slack notification failed (${exception.class.simpleName}); build result is unchanged. ${msg}"
+    }
+}
+
+def notifyBuildEmail(String notificationType, String message) {
+    def recipients = params.EMAIL_RECIPIENTS?.trim()
+    if (!recipients) {
+        echo "Email ${notificationType} notification skipped: EMAIL_RECIPIENTS is empty."
+        return
+    }
+
+    def projectName = env.JOB_NAME ?: env.APP_NAME ?: 'Events Project'
+    def branchName = env.BRANCH_NAME ?: env.CHANGE_BRANCH ?: 'unknown branch'
+    def buildNumber = env.BUILD_NUMBER ?: 'unknown'
+    def buildResult = currentBuild.currentResult ?: notificationType
+    def buildUrl = env.BUILD_URL ?: 'unavailable'
+    def subject = "[${notificationType}] ${projectName} · ${branchName} #${buildNumber}"
+    def body = """${message}
+
+Project: ${projectName}
+Branch: ${branchName}
+Build: #${buildNumber}
+Result: ${buildResult}
+URL: ${buildUrl}
+"""
+
+    try {
+        emailext(to: recipients, subject: subject, mimeType: 'text/plain', body: body)
+    } catch (Exception exception) {
+        echo "Email ${notificationType} notification failed (${exception.class.simpleName}); build result is unchanged."
     }
 }
