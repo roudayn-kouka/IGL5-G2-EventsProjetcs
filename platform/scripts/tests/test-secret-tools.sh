@@ -81,6 +81,15 @@ case "\$1 \$2" in
 esac
 EOF
 printf '#!/bin/sh\nexit 0\n' > "$T/bin/kubectl"
+# Faux curl : tunnel Argo CD prêt (healthz 200, version)
+cat > "$T/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  */healthz*) printf 200 ;;
+  */api/version*) echo '{"Version":"v2.13.2+fake"}' ;;
+  *) echo "curl inattendu : $*" >&2; exit 99 ;;
+esac
+EOF
 chmod +x "$T/bin/"*
 
 tok() {   # tok <nom> <code attendu> <motif> [VAR=valeur…]

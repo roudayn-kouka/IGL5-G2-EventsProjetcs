@@ -10,18 +10,22 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SERVER="${ARGOCD_LOCAL_SERVER:-localhost:8080}"
-# Argo CD sert du HTTP en clair (server.insecure) : sans --plaintext, le CLI tente TLS
-# et la poignée de main refusée coupe le tunnel kubectl port-forward.
-OPTS=(--server "$SERVER" --plaintext --grpc-web)
-command -v argocd >/dev/null || { echo "CLI argocd absent." >&2; exit 1; }
-command -v jq >/dev/null || { echo "jq absent." >&2; exit 1; }
+# shellcheck source=argocd-local.sh
+source "$ROOT/scripts/argocd-local.sh"
+SERVER="$ARGOCD_LOCAL_SERVER"
+OPTS=("${ARGOCD_LOCAL_OPTS[@]}")
+for tool in argocd curl jq; do
+  command -v "$tool" >/dev/null || { echo "Outil absent : $tool" >&2; exit 1; }
+done
 
 fail() { printf 'ÉCHEC : %s\n' "$*" >&2; exit 1; }
 
+# 0. Tunnel prêt (évite la course avec le démarrage de « make argocd-ui »)
+argocd_wait_tunnel || exit 1
+
 # 1. Session administrateur sur le serveur visé
 info="$(argocd account get-user-info "${OPTS[@]}" -o json)" \
-  || fail "Argo CD injoignable sur $SERVER : lancer « make argocd-ui » dans un autre terminal."
+  || fail "get-user-info a échoué sur $SERVER (voir l'erreur du CLI ci-dessus)."
 [[ "$(jq -r '.loggedIn' <<<"$info")" == true && "$(jq -r '.username' <<<"$info")" == admin ]] \
   || fail "Session admin absente sur $SERVER : lancer « make argocd-login »."
 echo "Session admin vérifiée sur $SERVER."

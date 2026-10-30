@@ -367,7 +367,9 @@ Jenkins tourne en conteneur Docker sur l'EC2 **`fst-events-devops`** (Docker Com
 
    Le jeton n'est jamais affiché ni passé en argument : `scripts/argocd-jenkins-token.sh` le transmet par stdin à `scripts/vault-set.sh`, qui garde une copie chiffrée du Vault précédent dans `ansible/.vault-backups/` (ignoré par Git). Les deux scripts sont testés par `bash scripts/tests/test-secret-tools.sh`.
 
-   **`lost connection to pod` / `connection reset by peer` / `connection refused`** : une connexion TLS (`https://localhost:8080`, `curl https`, CLI sans `--plaintext`) est envoyée au port en clair ; le serveur la coupe et `kubectl port-forward` s'arrête entièrement, d'où `connection refused` ensuite. Utiliser `http://` et `--plaintext`.
+   **`lost connection to pod` / `connection reset by peer` / `connection refused`** : une connexion TLS est envoyée au port en clair ; le serveur la coupe et `kubectl port-forward` s'arrête entièrement, d'où `connection refused` ensuite. Sources : `https://localhost:8080`, `curl https`, CLI sans `--plaintext`, et **`argocd login` lui-même**, qui sonde le serveur en TLS même avec `--plaintext`. C'est pourquoi `make argocd-login` n'utilise pas `argocd login` : `scripts/argocd-session.sh` attend que le tunnel réponde, ouvre la session par `POST /api/v1/session` en HTTP clair et l'enregistre dans la configuration du CLI (`plain-text` + `grpc-web`, 0600). Tests : `bash scripts/tests/test-argocd-session.sh`.
+
+   **`unable to forward port because pod is not running`** ou nœuds `NotReady` : sur AWS Academy, la fin de session du lab arrête les instances (nœuds EKS, EC2 Jenkins). Relancer le lab (*Start Lab*), attendre les nœuds `Ready` (`kubectl get nodes`) et le pod `argocd-server` `Running`, puis `make argocd-ui`.
 4. **Reconfigurer Jenkins** : `make configure`. Le playbook commence par `ansible/preflight.yml` (local, sans SSH) et s'arrête si l'inventaire ou `group_vars/devops/terraform.yml` contiennent des valeurs d'exemple (`203.0.113.10`, `000000000000`) ou un registre ECR hors de la région, si `argocd_server`/`apps_domain` manquent dans `runtime.yml`, ou si `vault_argocd_token` est vide. Vérification seule : `cd ansible && ansible-playbook preflight.yml --ask-vault-pass`. Ansible réécrit la configuration JCasC (`ARGOCD_SERVER`, `APPS_DOMAIN`, `GITOPS_BRANCH`) et le credential `argocd-token`.
 5. **Credentials Jenkins** (créés par JCasC à partir du Vault) : `github-credentials` (push sur `gitops`), `argocd-token`, `sonar-token`, `nexus-credentials`. AWS/ECR : rôle de l'instance (`LabInstanceProfile` sur AWS Academy), aucune clé stockée.
 
@@ -384,7 +386,7 @@ Jenkins tourne en conteneur Docker sur l'EC2 **`fst-events-devops`** (Docker Com
 |---|---|---|
 | `PRÉREQUIS MANQUANT : ARGOCD_SERVER est vide` / `erreur CONFIGURATION … server address unspecified` | `runtime.yml` absent lors de `make configure` | Prérequis 2 puis 4 |
 | `Credential Jenkins « argocd-token » vide` / `erreur AUTHENTIFICATION` | Jeton absent, expiré ou révoqué | Prérequis 3 puis 4 |
-| `lost connection to pod` (port-forward), `unexpected eof while reading`, puis `connection refused` | Client TLS vers Argo CD en HTTP clair | `http://localhost:8080`, CLI avec `--plaintext --grpc-web` (prérequis 3) |
+| `lost connection to pod` (port-forward), `unexpected eof while reading`, puis `connection refused` | Client TLS vers Argo CD en HTTP clair (dont la sonde TLS de `argocd login`) | `http://localhost:8080`, `make argocd-login`, CLI avec `--plaintext --grpc-web` (prérequis 3) |
 | `erreur AUTORISATION` | `policy.csv` sans `get`/`sync` pour `jenkins` | `terraform/values/argocd.yaml.tftpl` |
 | `erreur DNS` / `erreur RÉSEAU` | Jenkins hors du VPC ou NLB filtré | Vérifier VPC, groupe de sécurité, `loadBalancerSourceRanges` |
 | `lit les valeurs sur …@main, mais Jenkins pousse sur …@gitops` | ApplicationSet modifié | Remettre `gitops` (prérequis 1) |

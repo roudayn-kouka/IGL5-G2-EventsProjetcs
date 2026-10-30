@@ -54,9 +54,10 @@ argocd-ui: ## Port-forward Argo CD en HTTP sur localhost port 8080 (relancé s'i
 	  echo "Tunnel interrompu (connexion TLS refusée ou API indisponible) : relance dans 2 s."; sleep 2; \
 	done
 
-argocd-login: ## Connexion admin au CLI Argo CD via le port-forward (mot de passe masqué)
-	@argocd login localhost:8080 --plaintext --grpc-web --username admin
-	@argocd account get-user-info --server localhost:8080 --plaintext --grpc-web
+# Pas de « argocd login » : il sonde le serveur en TLS même avec --plaintext, ce qui coupe
+# le tunnel. scripts/argocd-session.sh ouvre la session par l'API HTTP en clair.
+argocd-login: ## Session admin du CLI Argo CD via le port-forward (mot de passe masqué)
+	@bash scripts/argocd-session.sh
 
 argocd-token: ## Génère le jeton du compte jenkins et l'enregistre dans le Vault (jamais affiché)
 	@bash scripts/argocd-jenkins-token.sh
