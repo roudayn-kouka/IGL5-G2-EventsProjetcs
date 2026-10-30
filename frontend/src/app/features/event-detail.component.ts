@@ -180,98 +180,117 @@ const TACHE_COLORS: Record<string, string> = {
         <div class="section-card">
           <h2 class="section-title">Submit Feedback</h2>
 
-          @if (submitSuccess()) {
-            <div class="alert alert-success" role="status">
-              ✅ Feedback submitted successfully!
-              <button class="btn-dismiss" (click)="dismissSuccess()">✕</button>
+          <!-- Event not finished yet — backend blocks feedback until dateFin has passed -->
+          @if (isUpcoming()) {
+            <div class="alert alert-warning" role="note">
+              🗓 Feedback can only be submitted after the event ends
+              (<strong>{{ event()!.dateFin }}</strong>).
             </div>
           }
 
-          @if (submitError()) {
-            <div class="alert alert-error" role="alert">
-              ⚠ {{ submitError() }}
-              <button class="btn-dismiss" (click)="dismissError()">✕</button>
-            </div>
-          }
+          @if (!isUpcoming()) {
 
-          <form class="feedback-form" (ngSubmit)="submitFeedback()" #feedbackForm="ngForm">
-            <!-- Participant selection -->
-            <div class="form-row">
-              <label class="form-label" for="participant-select">Participant</label>
-              @if (participantsLoading()) {
-                <div class="select-skeleton"></div>
-              } @else if (participants().length > 0) {
-                <select
-                  id="participant-select"
-                  class="form-select"
-                  [(ngModel)]="selectedParticipantId"
-                  name="participantId"
-                  required
-                >
-                  <option [ngValue]="null" disabled>— Select a participant —</option>
-                  @for (p of participants(); track p.idPart) {
-                    <option [ngValue]="p.idPart">
-                      #{{ p.idPart }} · {{ p.prenom }} {{ p.nom }} ({{ tacheLabel(p.tache) }})
-                    </option>
+            @if (submitSuccess()) {
+              <div class="alert alert-success" role="status">
+                ✅ Feedback submitted successfully!
+                <button class="btn-dismiss" (click)="dismissSuccess()">✕</button>
+              </div>
+            }
+
+            @if (submitError()) {
+              <div class="alert alert-error" role="alert">
+                ⚠ {{ submitError() }}
+                <button class="btn-dismiss" (click)="dismissError()">✕</button>
+              </div>
+            }
+
+            <form class="feedback-form" (ngSubmit)="submitFeedback()" #feedbackForm="ngForm">
+              <!-- Participant selection — only participants assigned to THIS event -->
+              <div class="form-row">
+                <label class="form-label" for="participant-select">Participant</label>
+                @if (participantsLoading()) {
+                  <div class="select-skeleton"></div>
+                } @else if (eligibleParticipants().length > 0) {
+                  <select
+                    id="participant-select"
+                    class="form-select"
+                    [(ngModel)]="selectedParticipantId"
+                    name="participantId"
+                    required
+                  >
+                    <option [ngValue]="null" disabled>— Select a participant —</option>
+                    @for (p of eligibleParticipants(); track p.idPart) {
+                      <option [ngValue]="p.idPart">
+                        #{{ p.idPart }} · {{ p.prenom }} {{ p.nom }} ({{ tacheLabel(p.tache) }})
+                      </option>
+                    }
+                  </select>
+                  @if (alreadyReviewedCount() > 0) {
+                    <div class="form-hint">{{ alreadyReviewedCount() }} participant(s) already reviewed — hidden from list.</div>
                   }
-                </select>
-              } @else {
-                <div class="participants-empty">
-                  No participants found. Add participants first.
-                </div>
-              }
-            </div>
-
-            <!-- Star rating -->
-            <div class="form-row">
-              <label class="form-label">Rating</label>
-              <div class="star-picker" role="radiogroup" aria-label="Rating">
-                @for (star of [1,2,3,4,5]; track star) {
-                  <button
-                    type="button"
-                    class="star-btn"
-                    [class.active]="formNote >= star"
-                    (click)="formNote = star"
-                    (mouseenter)="hoverNote = star"
-                    (mouseleave)="hoverNote = 0"
-                    [attr.aria-label]="'Rate ' + star + ' out of 5'"
-                  >{{ (hoverNote || formNote) >= star ? '★' : '☆' }}</button>
-                }
-                @if (formNote > 0) {
-                  <span class="star-label">{{ formNote }}/5</span>
+                } @else if (participants().length > 0) {
+                  <div class="alert alert-info">
+                    ✔ All participants for this event have already submitted feedback.
+                  </div>
+                } @else {
+                  <div class="participants-empty">
+                    No participants are registered for this event.
+                  </div>
                 }
               </div>
-            </div>
 
-            <!-- Comment -->
-            <div class="form-row">
-              <label class="form-label" for="comment-input">Comment <span class="optional">(optional)</span></label>
-              <textarea
-                id="comment-input"
-                class="form-textarea"
-                [(ngModel)]="formComment"
-                name="commentaire"
-                placeholder="Share your experience…"
-                rows="3"
-                maxlength="500"
-              ></textarea>
-              <div class="char-count">{{ formComment.length }}/500</div>
-            </div>
+              <!-- Star rating -->
+              <div class="form-row">
+                <label class="form-label">Rating</label>
+                <div class="star-picker" role="radiogroup" aria-label="Rating">
+                  @for (star of [1,2,3,4,5]; track star) {
+                    <button
+                      type="button"
+                      class="star-btn"
+                      [class.active]="formNote >= star"
+                      (click)="formNote = star"
+                      (mouseenter)="hoverNote = star"
+                      (mouseleave)="hoverNote = 0"
+                      [attr.aria-label]="'Rate ' + star + ' out of 5'"
+                    >{{ (hoverNote || formNote) >= star ? '★' : '☆' }}</button>
+                  }
+                  @if (formNote > 0) {
+                    <span class="star-label">{{ formNote }}/5</span>
+                  }
+                </div>
+              </div>
 
-            <div class="form-actions">
-              <button
-                type="submit"
-                class="btn-submit"
-                [disabled]="submitting() || formNote === 0 || selectedParticipantId === null"
-              >
-                @if (submitting()) {
-                  <span class="spinner"></span> Submitting…
-                } @else {
-                  Submit Feedback
-                }
-              </button>
-            </div>
-          </form>
+              <!-- Comment -->
+              <div class="form-row">
+                <label class="form-label" for="comment-input">Comment <span class="optional">(optional)</span></label>
+                <textarea
+                  id="comment-input"
+                  class="form-textarea"
+                  [(ngModel)]="formComment"
+                  name="commentaire"
+                  placeholder="Share your experience…"
+                  rows="3"
+                  maxlength="500"
+                ></textarea>
+                <div class="char-count">{{ formComment.length }}/500</div>
+              </div>
+
+              <div class="form-actions">
+                <button
+                  type="submit"
+                  class="btn-submit"
+                  [disabled]="submitting() || formNote === 0 || selectedParticipantId === null || eligibleParticipants().length === 0"
+                >
+                  @if (submitting()) {
+                    <span class="spinner"></span> Submitting…
+                  } @else {
+                    Submit Feedback
+                  }
+                </button>
+              </div>
+            </form>
+
+          }
         </div>
       }
     </div>
@@ -363,6 +382,10 @@ const TACHE_COLORS: Record<string, string> = {
     .form-row { display: flex; flex-direction: column; gap: 6px; }
     .form-label { font-size: .86rem; font-weight: 700; color: #374151; }
     .optional { font-weight: 400; color: #94a3b8; }
+    .form-hint { font-size: .78rem; color: #94a3b8; margin-top: 4px; }
+
+    .alert-warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+    .alert-info    { background: #f0f9ff; border: 1px solid #bae6fd; color: #0c4a6e; }
 
     .form-select {
       padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 12px; font-size: .92rem;
@@ -419,12 +442,21 @@ export class EventDetailComponent implements OnInit {
   readonly average = signal<FeedbackAverage | null>(null);
   readonly feedbackLoading = signal(false);
   readonly feedbackError = signal<string | null>(null);
+  /** All participants from the backend — full list used to filter. */
   readonly participants = signal<Participant[]>([]);
   readonly participantsLoading = signal(false);
   readonly submitting = signal(false);
   readonly submitSuccess = signal(false);
   readonly submitError = signal<string | null>(null);
   readonly taskBreakdown = signal<{ label: string; count: number; color: string }[]>([]);
+
+  /**
+   * Participants assigned to THIS event who haven't yet submitted feedback.
+   * Backend validates both conditions — we check them client-side first so the
+   * user never sees the "Participant is not associated with this event" error.
+   */
+  readonly eligibleParticipants = signal<Participant[]>([]);
+  readonly alreadyReviewedCount = signal(0);
 
   selectedParticipantId: number | null = null;
   formNote = 0;
@@ -471,12 +503,34 @@ export class EventDetailComponent implements OnInit {
     this.participantApi.getAll().subscribe({
       next: ps => {
         this.participants.set(ps);
+        // Filter to only participants who are in THIS event's participant list.
+        // The backend returns events[] on each participant showing which events they belong to.
+        const forThisEvent = ps.filter(p =>
+          p.events?.some(e => e.idEvent === this.eventId) ?? false
+        );
+        this.updateEligible(forThisEvent, this.feedbacks());
         this.participantsLoading.set(false);
       },
       error: () => {
         this.participantsLoading.set(false);
       },
     });
+  }
+
+  /**
+   * Recompute eligible participants: assigned to this event AND not yet reviewed.
+   * Called whenever participants or feedbacks change.
+   */
+  private updateEligible(eventParticipants: Participant[], currentFeedbacks: Feedback[]): void {
+    const reviewedIds = new Set(currentFeedbacks.map(f => f.participantId));
+    const eligible = eventParticipants.filter(p => !reviewedIds.has(p.idPart));
+    const alreadyReviewed = eventParticipants.length - eligible.length;
+    this.eligibleParticipants.set(eligible);
+    this.alreadyReviewedCount.set(alreadyReviewed);
+    // Clear selection if the chosen participant is no longer eligible
+    if (this.selectedParticipantId !== null && !eligible.some(p => p.idPart === this.selectedParticipantId)) {
+      this.selectedParticipantId = null;
+    }
   }
 
   submitFeedback(): void {
@@ -492,18 +546,31 @@ export class EventDetailComponent implements OnInit {
       })
       .subscribe({
         next: fb => {
-          this.feedbacks.update(list => [fb, ...list]);
+          const updated = [fb, ...this.feedbacks()];
+          this.feedbacks.set(updated);
           this.formNote = 0;
           this.hoverNote = 0;
           this.formComment = '';
           this.selectedParticipantId = null;
           this.submitSuccess.set(true);
           this.submitting.set(false);
+          // Re-filter eligible list so the reviewer disappears from the dropdown
+          const eventParts = this.participants().filter(p =>
+            p.events?.some(e => e.idEvent === this.eventId) ?? false
+          );
+          this.updateEligible(eventParts, updated);
           // Refresh average
           this.feedbackApi.getAverage(this.eventId).subscribe(avg => this.average.set(avg));
         },
         error: (err: unknown) => {
-          this.submitError.set(apiErrorMessage(err, 'Failed to submit feedback.'));
+          const msg = apiErrorMessage(err, 'Failed to submit feedback.');
+          // Surface a clearer message for the most common backend errors
+          const friendly = msg.includes('not associated')
+            ? 'This participant is not registered for this event.'
+            : msg.includes('already reviewed') || msg.includes('Conflict')
+            ? 'This participant already submitted feedback for this event.'
+            : msg;
+          this.submitError.set(friendly);
           this.submitting.set(false);
         },
       });
@@ -513,7 +580,13 @@ export class EventDetailComponent implements OnInit {
     if (!confirm('Delete this feedback?')) return;
     this.feedbackApi.delete(id).subscribe({
       next: () => {
-        this.feedbacks.update(list => list.filter(f => f.id !== id));
+        const updated = this.feedbacks().filter(f => f.id !== id);
+        this.feedbacks.set(updated);
+        // Restore deleted reviewer to eligible list
+        const eventParts = this.participants().filter(p =>
+          p.events?.some(e => e.idEvent === this.eventId) ?? false
+        );
+        this.updateEligible(eventParts, updated);
         this.feedbackApi.getAverage(this.eventId).subscribe(avg => this.average.set(avg));
       },
       error: (err: unknown) => {

@@ -1,0 +1,11 @@
+{
+  "/events": {
+    "target": "http://a2a1a49d1c95f4fe690d345460bc431a-6b9a47e0c9078393.elb.us-east-1.amazonaws.com",
+    "secure": false,
+    "changeOrigin": true,
+    "headers": {
+      "Host": "feedback.44.218.144.91.sslip.io"
+    },
+    "logLevel": "info"
+  }
+}

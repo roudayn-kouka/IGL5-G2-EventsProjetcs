@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "start": "ng serve --proxy-config proxy.conf.json",
+    "start:aws": "ng serve --proxy-config proxy.conf.aws.json",
     "build": "ng build",
     "test": "ng test --watch=false"
   },

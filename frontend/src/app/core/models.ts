@@ -24,6 +24,7 @@ export interface Participant {
   nom: string;
   prenom: string;
   tache: Tache;
+  events?: Event[];   // backend includes nested events on participant responses
 }
 
 export interface Logistics {
