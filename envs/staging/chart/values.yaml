@@ -1,0 +1,50 @@
+# Valeurs par défaut du chart.
+# Ordre de surcharge (Argo CD) : values.yaml < values-<profil>.yaml < envs/<env>/values.yaml de la branche gitops (écrit par Jenkins)
+feature: local
+owner: equipe
+
+image:
+  repository: 000000000000.dkr.ecr.eu-west-3.amazonaws.com/events-app
+  tag: latest
+  pullPolicy: IfNotPresent
+# Images sur Amazon ECR : les nœuds EKS s'authentifient par leur rôle IAM, aucun secret de registre
+imagePullSecrets: []
+
+replicaCount: 1
+
+app:
+  port: 8089
+  contextPath: /events
+  demoData: true
+  javaOpts: "-XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError"
+
+resources:
+  requests: { cpu: 100m, memory: 384Mi }
+  limits:   { cpu: 500m, memory: 768Mi }
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+mysql:
+  image: mysql:8.0
+  database: eventsProject
+  persistence:
+    enabled: false     # review : base éphémère (emptyDir)
+    size: 5Gi
+    storageClass: gp3
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+
+ingress:
+  enabled: true
+  className: nginx
+  host: events.local
+
+metrics:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
