@@ -3,17 +3,17 @@
 ## Objectif et périmètre
 
 Le `Jenkinsfile` conserve la chaîne applicative existante : Maven, JUnit/JaCoCo,
-SonarQube, Nexus, Docker, Trivy, ECR, promotion GitOps, Argo CD, smoke tests et
-OWASP ZAP. Terraform est un chemin **opt-in** pour remettre en place la
+SonarQube, Nexus, Docker, Trivy, ECR, promotion GitOps, Argo CD et smoke tests.
+Terraform est un chemin **opt-in** pour remettre en place la
 plateforme partagée EKS/ECR/Argo, pas une étape exécutée pour chaque changement
 de code.
 
-Le chemin Terraform est disponible uniquement pour un build direct de `develop`
-quand le paramètre Jenkins `PROVISION_INFRASTRUCTURE` est coché. Les PR, les
-branches `feature/*` et `main` le sautent. Cette restriction évite qu'une feature
-ou une production applicative crée des ressources AWS partagées. `main` conserve
-sa propre approbation de promotion applicative et ne peut pas provisionner via
-ce pipeline.
+Le chemin Terraform est disponible pour un build direct de `develop` quand le
+paramètre Jenkins `PROVISION_INFRASTRUCTURE` est coché. Une exception explicitement
+limitée à `feature/feedback` existe pour la démonstration Academy approuvée. Les
+PR, les autres branches `feature/*` et `main` le sautent. `main` conserve sa
+propre approbation de promotion applicative et ne peut pas provisionner via ce
+pipeline.
 
 Ne cochez ce paramètre que lorsqu'un opérateur souhaite réellement restaurer ou
 mettre à jour la plateforme. Les builds normaux doivent le laisser à `false`.
@@ -40,7 +40,8 @@ build. Ne collez jamais ces valeurs dans un paramètre de build ou un log.
 
 ## Déroulement d'un provisioning approuvé
 
-1. Lancer `develop` avec `PROVISION_INFRASTRUCTURE=true`.
+1. Lancer `develop`, ou l'exception approuvée `feature/feedback`, avec
+   `PROVISION_INFRASTRUCTURE=true` et `LOCAL_DEMO=false`.
 2. Jenkins initialise le backend S3 déjà approuvé avec `-lockfile=readonly`, puis
    exécute `terraform fmt -check -recursive` et `terraform validate` depuis
    `platform/terraform`.
@@ -52,8 +53,8 @@ build. Ne collez jamais ces valeurs dans un paramètre de build ou un log.
    Kubernetes `Ready` et le dépôt ECR disponible.
 6. Il produit alors le plan complet Argo/monitoring, demande une seconde
    approbation, et applique exactement ce second plan.
-7. La chaîne existante reprend : image Docker, ECR, GitOps, Argo CD, smoke tests
-   et, sauf si `RUN_ZAP=false` a été demandé explicitement, le scan OWASP ZAP.
+7. La chaîne existante reprend : image Docker, ECR, GitOps, Argo CD et smoke
+   tests. Le scan OWASP ZAP a été retiré à la demande du propriétaire du projet.
 
 Deux plans sont nécessaires pour un compte sans EKS : les providers Kubernetes et
 Helm du projet dépendent de l'endpoint et du jeton du cluster. Cette séparation

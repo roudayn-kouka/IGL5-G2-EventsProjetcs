@@ -54,7 +54,7 @@ pipeline {
                description: 'Application domain used only by the cloud deployment path.')
         // Shared infrastructure is never created by an ordinary application build.
         booleanParam(name: 'PROVISION_INFRASTRUCTURE', defaultValue: false,
-                     description: 'Develop only: create/update the shared Terraform platform after two reviewed plans and approvals.')
+                     description: 'Develop or approved feature/feedback only: create/update the shared Terraform platform after two reviewed plans and approvals.')
         booleanParam(name: 'LOCAL_DEMO', defaultValue: false,
                      description: 'Feature-only local CI/CD demo: deploy the scanned image with Docker Compose and skip AWS, GitOps and Argo CD actions.')
     }
@@ -209,8 +209,9 @@ pipeline {
         // ------------------------------------------------------------ 8
         // A new EKS account cannot plan Kubernetes/Helm resources until the cluster
         // exists. The repository-owned academy.ps1 uses this same bootstrap split.
-        // These stages are deliberately limited to develop: shared infrastructure is
-        // not owned by a feature branch, and main is never provisioned.
+        // These stages are normally limited to develop. The Feedback branch has a
+        // deliberately narrow, opt-in exception for the approved live demonstration;
+        // all other feature branches and main remain unable to provision.
         stage('Terraform init, fmt & validate') {
             when {
                 beforeAgent true
@@ -771,10 +772,13 @@ EOF
 // =============================================================================
 
 // The shared EKS/ECR/Argo platform is deliberately provisioned only from the
-// protected integration branch. Feature, PR and main jobs retain application CI/CD
-// but cannot create infrastructure merely by changing their Jenkinsfile.
+// protected integration branch. An explicitly approved Feedback demonstration may
+// also provision, but PRs, every other feature branch and main cannot create
+// infrastructure merely by changing their Jenkinsfile.
 def terraformProvisioningRequested() {
-    return env.LOCAL_DEMO != 'true' && params.PROVISION_INFRASTRUCTURE && !env.CHANGE_ID && env.BRANCH_TYPE == 'develop'
+    def approvedBranch = env.BRANCH_TYPE == 'develop' ||
+        (env.BRANCH_TYPE == 'feature' && env.FEATURE_SLUG == 'feedback')
+    return env.LOCAL_DEMO != 'true' && params.PROVISION_INFRASTRUCTURE && !env.CHANGE_ID && approvedBranch
 }
 
 def ownerOf(String branch) {
