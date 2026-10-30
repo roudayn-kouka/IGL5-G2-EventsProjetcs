@@ -259,16 +259,14 @@ pipeline {
                             --password-stdin
 
                         # Tag image
-                        docker tag "$IMAGE" "$HUB_IMAGE:$IMAGE_TAG"
                         docker tag "$IMAGE" "$HUB_IMAGE:latest"
 
                         # Publish image
-                        docker push "$HUB_IMAGE:$IMAGE_TAG"
                         docker push "$HUB_IMAGE:latest"
 
                         docker logout
 
-                        echo "Docker Hub : $HUB_IMAGE:$IMAGE_TAG"
+                        echo "Docker Hub : $HUB_IMAGE:latest"
                     '''
                 }
             }
