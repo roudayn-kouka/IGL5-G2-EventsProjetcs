@@ -1,0 +1,202 @@
+﻿<section class="page">
+
+  <div class="page-header">
+    <div>
+      <h1>Gestion des logistiques</h1>
+      <p>Gérez les ressources et les réservations de vos événements.</p>
+    </div>
+
+    <button class="btn-primary" (click)="openAddForm()">
+      + Ajouter une logistique
+    </button>
+  </div>
+
+  @if (message) {
+    <div class="alert success">{{ message }}</div>
+  }
+
+  @if (error) {
+    <div class="alert error">{{ error }}</div>
+  }
+
+  <div class="stats-grid">
+    <article class="stat-card">
+      <span class="stat-icon">??</span>
+      <div>
+        <p>Total logistiques</p>
+        <h2>{{ totalItems }}</h2>
+      </div>
+    </article>
+
+    <article class="stat-card">
+      <span class="stat-icon">??</span>
+      <div>
+        <p>Quantité totale</p>
+        <h2>{{ totalQuantity }}</h2>
+      </div>
+    </article>
+
+    <article class="stat-card">
+      <span class="stat-icon">??</span>
+      <div>
+        <p>Réservées</p>
+        <h2>{{ reservedItems }}</h2>
+      </div>
+    </article>
+
+    <article class="stat-card">
+      <span class="stat-icon">??</span>
+      <div>
+        <p>Coût estimé</p>
+        <h2>{{ estimatedTotal | number:'1.2-2' }}</h2>
+      </div>
+    </article>
+  </div>
+
+  <div class="table-container">
+    <div class="table-header">
+      <div>
+        <h2>Liste des logistiques</h2>
+        <p>Consultez et gérez les ressources disponibles.</p>
+      </div>
+
+      <button
+        class="btn-filter"
+        [class.selected]="reservedOnly"
+        (click)="toggleFilter()">
+        {{ reservedOnly ? 'Afficher tout' : 'Voir les réservées' }}
+      </button>
+    </div>
+
+    @if (loading) {
+      <p class="empty">Chargement des logistiques...</p>
+    } @else if (filteredLogistics.length === 0) {
+      <p class="empty">Aucune logistique à afficher.</p>
+    } @else {
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Description</th>
+              <th>Quantité</th>
+              <th>Prix unitaire</th>
+              <th>Réservation</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            @for (item of filteredLogistics; track item.idLog) {
+              <tr>
+                <td>#{{ item.idLog }}</td>
+                <td class="description">{{ item.description }}</td>
+                <td>{{ item.quantite }}</td>
+                <td>{{ item.prixUnit | number:'1.2-2' }}</td>
+                <td>
+                  <span
+                    class="status"
+                    [class.reserved]="item.reserve">
+                    {{ item.reserve ? 'Réservée' : 'Disponible' }}
+                  </span>
+                </td>
+                <td>
+                  <div class="actions">
+                    <button
+                      class="btn-cost"
+                      title="Calculer le coût"
+                      (click)="calculateCost(item.idLog)">
+                      €
+                    </button>
+
+                    <button
+                      class="btn-edit"
+                      title="Modifier"
+                      (click)="openEditForm(item)">
+                      ??
+                    </button>
+
+                    <button
+                      class="btn-delete"
+                      title="Supprimer"
+                      (click)="deleteItem(item.idLog)">
+                      ???
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+
+  @if (totalCost !== null && selectedId !== null) {
+    <div class="cost-result">
+      Coût total de la logistique #{{ selectedId }} :
+      <strong>{{ totalCost | number:'1.2-2' }}</strong>
+    </div>
+  }
+
+  @if (showForm) {
+    <div class="modal-backdrop">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>{{ editing ? 'Modifier la logistique' : 'Nouvelle logistique' }}</h2>
+          <button class="close-btn" (click)="closeForm()">×</button>
+        </div>
+
+        <form (ngSubmit)="save()">
+          <label for="description">Description</label>
+          <input
+            id="description"
+            type="text"
+            name="description"
+            [(ngModel)]="form.description"
+            placeholder="Ex : Vidéoprojecteur"
+            required>
+
+          <label for="quantite">Quantité</label>
+          <input
+            id="quantite"
+            type="number"
+            name="quantite"
+            [(ngModel)]="form.quantite"
+            min="1"
+            required>
+
+          <label for="prixUnit">Prix unitaire</label>
+          <input
+            id="prixUnit"
+            type="number"
+            name="prixUnit"
+            [(ngModel)]="form.prixUnit"
+            min="0"
+            step="0.01"
+            required>
+
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              name="reserve"
+              [(ngModel)]="form.reserve">
+            Logistique réservée
+          </label>
+
+          <div class="modal-actions">
+            <button type="button" class="btn-cancel" (click)="closeForm()">
+              Annuler
+            </button>
+            <button type="submit" class="btn-primary">
+              {{ editing ? 'Enregistrer' : 'Ajouter' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+</section>
+
+
