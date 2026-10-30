@@ -587,10 +587,15 @@ appset_only_env    = "${env.APPSET_ENV}"
                     steps {
                         script {
                             withTf {
-                                sh '''
-                                  cd $TF_DIR
-                                  terraform plan -input=false -out=tfplan
-                                  terraform show -no-color tfplan > "$WORKSPACE/tfplan.txt"
+                              sh '''
+                                cd $TF_DIR
+                                if aws ecr describe-repositories --region $AWS_REGION --repository-names events-app >/dev/null 2>&1 \
+                                    && ! terraform state list | grep -q '^aws_ecr_repository.events_app$'; then
+                                    echo "Depot ECR existant : import dans l'etat Terraform"
+                                    terraform import -input=false aws_ecr_repository.events_app events-app
+                                fi
+                                terraform plan -input=false -out=tfplan
+                                terraform show -no-color tfplan > "$WORKSPACE/tfplan.txt"
                                 '''
                             }
                         }
