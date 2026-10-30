@@ -32,14 +32,12 @@ public class LogisticsController {
         return logisticsService.updateLogistics(logistics.toEntity());
     }
 
-    // DELETE /logistics/{id}
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable("id") int idLog) {
         logisticsService.deleteLogistics(idLog);
     }
 
-    // GET /logistics/{id}
     @GetMapping("/{id}")
     public Logistics getById(@PathVariable("id") int idLog) {
         return logisticsService.getLogisticsById(idLog);

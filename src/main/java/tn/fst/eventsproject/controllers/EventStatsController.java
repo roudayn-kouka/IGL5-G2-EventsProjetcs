@@ -32,7 +32,6 @@ public class EventStatsController {
         return eventStatsService.getGlobalStats();
     }
 
-    // GET /event-stats/{id}
     @GetMapping("/{id}")
     public EventStatsDTO getEventStats(@PathVariable("id") int idEvent) {
         return eventStatsService.getEventStats(idEvent);
