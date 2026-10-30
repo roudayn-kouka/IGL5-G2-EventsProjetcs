@@ -3,3 +3,7 @@
 !target/*.jar
 platform/
 docs/
+frontend/node_modules
+frontend/dist
+frontend/.angular
+.git
