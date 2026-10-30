@@ -686,7 +686,17 @@ EOF
                       APP="events-$ENV_NAME"
                       WANTED=$(cat gitops-revision.txt)
                       for i in $(seq 1 60); do
-                        J=$(argocd app get "$APP" --refresh -o json 2>/dev/null || true)
+                        if ! J=$(argocd app get "$APP" --refresh -o json 2>&1); then
+                          echo "ERROR: Cannot query Argo CD at ${ARGOCD_SERVER:-<unset>}." >&2
+                          echo "Start the trusted events-argocd-tunnel helper and verify its Academy session, then retry." >&2
+                          printf '%s\n' "$J" >&2
+                          exit 1
+                        fi
+                        if ! echo "$J" | jq -e '.status.sync.status and .status.health.status' >/dev/null; then
+                          echo "ERROR: Argo CD returned no application status for $APP." >&2
+                          printf '%s\n' "$J" >&2
+                          exit 1
+                        fi
                         REV=$(echo "$J" | jq -r '(.status.sync.revisions // [.status.sync.revision]) | join(",")')
                         REV_MATCH=$(echo "$J" | jq -r --arg wanted "$WANTED" '(.status.sync.revisions // [.status.sync.revision]) | index($wanted) != null')
                         SYNC=$(echo "$J" | jq -r '.status.sync.status // empty')
