@@ -4,7 +4,7 @@
 #  build (étape 12), avec l'image attendue, et que l'Application soit saine.
 #
 #  Application multi-source (ApplicationSet events-environments) :
-#    source « chart »  : platform/gitops/charts/events-app sur main (évolue avec le code)
+#    source « chart »  : envs/<env>/chart sur GITOPS_BRANCH (copié par l'étape 12)
 #    source « values » : envs/<env>/values.yaml sur GITOPS_BRANCH  <- révision comparée
 #  .status.sync.revisions[i] suit l'ordre de .spec.sources : on compare la révision
 #  de la source « values » au commit poussé, pas une révision quelconque.

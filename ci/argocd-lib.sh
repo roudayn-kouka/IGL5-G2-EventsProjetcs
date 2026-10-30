@@ -52,5 +52,14 @@ argocd_check_values_source() {
     echo "  Corriger l'ApplicationSet (platform/gitops/platform/apps/40-events-environments.yaml) : la révision poussée ne serait jamais déployée." >&2
     return 1
   fi
-  printf 'Argo CD : %s lit les valeurs sur %s@%s (source %s).\n' "$app" "$repo" "$rev" "$idx"
+  # Argo CD 2.13 : une source $values ne peut pas lire le dépôt du chart à une autre révision
+  local other
+  other="$(jq -r --arg b "$GITOPS_BRANCH" '[(.spec.sources // [])[] | select(.targetRevision != $b) | "\(.path // .ref // "?")@\(.targetRevision)"] | join(", ")' <<<"$json")"
+  if [[ -n "$other" ]]; then
+    printf 'Argo CD : %s a une source hors de %s (%s) : Argo CD 2.13 refuse deux révisions du même dépôt (ComparisonError).\n' \
+      "$app" "$GITOPS_BRANCH" "$other" >&2
+    echo "  Corriger l'ApplicationSet (platform/gitops/platform/apps/40-events-environments.yaml) : chart et valeurs sur $GITOPS_BRANCH." >&2
+    return 1
+  fi
+  printf 'Argo CD : %s lit chart et valeurs sur %s@%s (source values %s).\n' "$app" "$repo" "$rev" "$idx"
 }
