@@ -26,7 +26,11 @@
 //
 //  --- Mode infra (Terraform "mode PC", etat local) ---
 //  create_devops_ec2 = false | argocd_public = true | appset_only_env = logistics | eks_raw = true
-//  Credentials en plus : grafana-admin-password, gmail-credentials
+//  Credentials en plus : grafana-admin-password
+//
+//  --- E-mails ---
+//  Tous les e-mails (app et infra) vont aux "Default Recipients" configures dans
+//  Manage Jenkins > System > Extended E-mail Notification. Aucune adresse dans ce fichier.
 // =============================================================================
 
 pipeline {
@@ -587,15 +591,16 @@ appset_only_env    = "${env.APPSET_ENV}"
                     steps {
                         script {
                             withTf {
-                              sh '''
-                                cd $TF_DIR
-                                if aws ecr describe-repositories --region $AWS_REGION --repository-names events-app >/dev/null 2>&1 \
-                                    && ! terraform state list | grep -q '^aws_ecr_repository.events_app$'; then
+                                sh '''
+                                  cd $TF_DIR
+                                  # Depot ECR deja cree par le mode app : on l'importe dans l'etat Terraform
+                                  if aws ecr describe-repositories --region $AWS_REGION --repository-names events-app >/dev/null 2>&1 \
+                                      && ! terraform state list | grep -q '^aws_ecr_repository.events_app$'; then
                                     echo "Depot ECR existant : import dans l'etat Terraform"
                                     terraform import -input=false aws_ecr_repository.events_app events-app
-                                fi
-                                terraform plan -input=false -out=tfplan
-                                terraform show -no-color tfplan > "$WORKSPACE/tfplan.txt"
+                                  fi
+                                  terraform plan -input=false -out=tfplan
+                                  terraform show -no-color tfplan > "$WORKSPACE/tfplan.txt"
                                 '''
                             }
                         }
@@ -765,6 +770,25 @@ appset_only_env    = "${env.APPSET_ENV}"
                 }
             }
         }
+        // Build interrompu (timeout, annulation) : avant, aucun e-mail n'etait envoye
+        aborted {
+            script {
+                if (params.ACTION == 'app') {
+                    notifyTeam('ABORTED', 'warning')
+                } else {
+                    notifyInfra('danger', "INFRA ${params.ACTION} ABANDONNÉ  #${env.BUILD_NUMBER}")
+                }
+            }
+        }
+        unstable {
+            script {
+                if (params.ACTION == 'app') {
+                    notifyTeam('UNSTABLE', 'warning')
+                } else {
+                    notifyInfra('danger', "INFRA ${params.ACTION} INSTABLE  #${env.BUILD_NUMBER}")
+                }
+            }
+        }
     }
 }
 
@@ -819,19 +843,29 @@ def slugify(String s) {
     return out.length() > 40 ? out.substring(0, 40).replaceAll(/-+$/, '') : out
 }
 
+// =============================================================================
+//  Notifications : e-mail vers les "Default Recipients" de Jenkins (System)
+// =============================================================================
+
+// Point unique d'envoi. '$DEFAULT_RECIPIENTS' est entre apostrophes simples : c'est le plugin
+// Email Extension qui le remplace par l'adresse configuree dans Manage Jenkins > System.
+def notifyMail(String subject, String body, boolean attachLog) {
+    try {
+        emailext to: '$DEFAULT_RECIPIENTS',
+                 subject: subject,
+                 body: body,
+                 attachLog: attachLog
+    } catch (Exception e) {
+        echo "Mail indisponible : ${e.message}"
+    }
+}
+
 def notifyTeam(String status, String color) {
     def msg = "${status} - ${env.FEATURE_SLUG} (#${env.BUILD_NUMBER}) - ${env.OWNER} - ${env.BUILD_URL}"
     echo "Notification : ${msg}"
 
-    // E-mail (toujours actif)
-    try {
-        emailext to: 'ahlemmastouri234@gmail.com',
-                 subject: "[Jenkins] ${status} - ${env.FEATURE_SLUG} #${env.BUILD_NUMBER}",
-                 body: msg,
-                 attachLog: (status == 'FAILURE')
-    } catch (Exception e) {
-        echo "Mail indisponible : ${e.message}"
-    }
+    // E-mail (toujours actif), log joint si le build n'est pas un succes
+    notifyMail("[Jenkins] ${status} - ${env.FEATURE_SLUG} #${env.BUILD_NUMBER}", msg, status != 'SUCCESS')
 
     // Slack uniquement si active (SLACK_ENABLED=true)
     if (env.SLACK_ENABLED == 'true') {
@@ -865,16 +899,7 @@ def withTf(Closure body) {
     }
 }
 
-// Renomme (ancien nom : notify) pour eviter toute confusion avec notifyTeam
+// Meme circuit que notifyTeam : adresse unique definie dans Jenkins, plus de gmail-credentials
 def notifyInfra(String color, String text) {
-    try {
-        withCredentials([usernamePassword(credentialsId: 'gmail-credentials',
-                                          usernameVariable: 'GMAIL_USER', passwordVariable: 'GMAIL_PSW')]) {
-            emailext from: env.GMAIL_USER,
-                     to: env.GMAIL_USER,
-                     subject: "[Events INFRA] ${text}",
-                     body: "${text}\n${env.BUILD_URL}console",
-                     attachLog: (color == 'danger')
-        }
-    } catch (e) { echo "E-mail non envoyé : ${e.message}" }
+    notifyMail("[Events INFRA] ${text}", "${text}\n${env.BUILD_URL}console", color == 'danger')
 }
