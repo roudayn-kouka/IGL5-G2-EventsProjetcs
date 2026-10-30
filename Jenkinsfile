@@ -52,6 +52,8 @@ pipeline {
                description: 'Private Argo CD endpoint used only by the cloud synchronization stage.')
         string(name: 'APPS_DOMAIN', defaultValue: '44.218.144.91.sslip.io',
                description: 'Application domain used only by the cloud deployment path.')
+        string(name: 'SMOKE_ELB_HOST', defaultValue: '',
+               description: 'Cloud smoke tests only: current ingress controller ELB DNS name. APP_HOST remains the HTTP Host header for NGINX routing.')
         // Shared infrastructure is never created by an ordinary application build.
         booleanParam(name: 'PROVISION_INFRASTRUCTURE', defaultValue: false,
                      description: 'Develop or approved feature/feedback only: create/update the shared Terraform platform after two reviewed plans and approvals.')
@@ -741,20 +743,25 @@ EOF
                         sh '''#!/usr/bin/env bash
                           set -euo pipefail
                           BASE="http://$APP_HOST/events"
+                          CURL_HOST_HEADER=()
                           if [ "$LOCAL_DEMO" = true ]; then
                             BASE="http://host.docker.internal:9090/events"
+                          else
+                            : "${SMOKE_ELB_HOST:?SMOKE_ELB_HOST must be set to the current ingress controller ELB DNS name for cloud smoke tests}"
+                            BASE="http://$SMOKE_ELB_HOST/events"
+                            CURL_HOST_HEADER=(-H "Host: $APP_HOST")
                           fi
                           {
-                          HEALTH=$(curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "$BASE/actuator/health/readiness")
+                          HEALTH=$(curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "${CURL_HOST_HEADER[@]}" "$BASE/actuator/health/readiness")
                           echo "$HEALTH"
                           echo "$HEALTH" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"' || {
                             echo "Readiness Actuator n'est pas UP."; exit 1;
                           }
-                          curl -fsS --retry 10 --retry-delay 6 --retry-all-errors -o /dev/null "$BASE/actuator/prometheus"
+                          curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "${CURL_HOST_HEADER[@]}" -o /dev/null "$BASE/actuator/prometheus"
                           echo "Endpoint Prometheus disponible."
 
                           for endpoint in "$BASE/event-stats/summary" "$BASE/event/"; do
-                            STATUS=$(curl -sS -o /dev/null -w '%{http_code}' "$endpoint" || true)
+                            STATUS=$(curl -sS "${CURL_HOST_HEADER[@]}" -o /dev/null -w '%{http_code}' "$endpoint" || true)
                             if [ "$STATUS" = "404" ]; then
                               echo "AVERTISSEMENT : endpoint métier absent sur cette feature : $endpoint"
                             elif [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
