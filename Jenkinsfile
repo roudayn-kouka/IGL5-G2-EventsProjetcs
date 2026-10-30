@@ -9,6 +9,9 @@
 //    ACTION = infra-apply    : plan + approbation + apply + token Argo CD + ApplicationSet
 //    ACTION = infra-destroy  : approbation + nettoyage du cluster + terraform destroy
 //
+//    RECREATE = true (avec infra-apply ou app-infra) : DETRUIT toute l'infra AVANT le plan,
+//               pour repartir d'une infrastructure neuve (approbation manuelle requise).
+//
 //  Les modes infra-* sont BLOQUES hors de la branche feature/logistics (garde-fou).
 //  Les builds declenches automatiquement utilisent toujours ACTION=app (sans danger).
 //
@@ -50,6 +53,8 @@ pipeline {
                description: 'app = CI/CD application | app-infra = terraform apply (avec approbation) PUIS CI/CD application | infra-plan = ne change rien | infra-apply = cree VPC + EKS + ECR + Argo CD | infra-destroy = tout supprimer (feature/logistics uniquement)')
         string(name: 'CLUSTER_VERSION', defaultValue: '1.35',
                description: 'Version Kubernetes en SUPPORT STANDARD (le support etendu coute 6 fois plus). Liste : aws eks describe-cluster-versions')
+        booleanParam(name: 'RECREATE', defaultValue: false,
+               description: 'Avec infra-apply ou app-infra : DETRUIT toute l\'infra AVANT le plan pour repartir de zero (approbation requise, ~15 a 25 min de plus, consomme du credit)')
     }
 
     environment {
@@ -149,6 +154,29 @@ appset_only_env    = "${env.APPSET_ENV}"
                             withAws {
                                 sh 'ALLOW_MISSING_EKS=1 bash platform/scripts/ensure-eks-access.sh'
                             }
+                        }
+                    }
+                }
+
+                // -------- NOUVEAU : repartir de zero avant le plan (RECREATE=true) --------
+                stage('Approbation : détruire avant recréation') {
+                    when {
+                        expression { params.RECREATE && params.ACTION in ['infra-apply', 'app-infra'] }
+                    }
+                    steps {
+                        timeout(time: 30, unit: 'MINUTES') {
+                            input message: 'RECREATE : DÉTRUIRE toute l\'infra (cluster, nœuds, VPC, ECR) puis la recréer de zéro ?', ok: 'Détruire et recréer'
+                        }
+                    }
+                }
+
+                stage('Destruction avant recréation') {
+                    when {
+                        expression { params.RECREATE && params.ACTION in ['infra-apply', 'app-infra'] }
+                    }
+                    steps {
+                        script {
+                            destroyInfra()
                         }
                     }
                 }
@@ -262,7 +290,8 @@ appset_only_env    = "${env.APPSET_ENV}"
 - L'application events-logistics apparaît dans Argo CD après le premier run en ACTION=app (~1 à 3 min).
 - Grafana : mot de passe du credential grafana-admin-password (utilisateur admin)
   kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80  -> http://localhost:3000
-- Argo CD : http://<adresse dans ${env.ARGOCD_DIR}/server> (utilisateur admin)"""
+- Argo CD : http://<adresse dans ${env.ARGOCD_DIR}/server> (utilisateur admin)
+- Si RECREATE a été utilisé : mets à jour le credential Jenkins argocd-token et la variable ARGOCD_SERVER (nouvelle adresse)."""
                         }
                     }
                 }
@@ -280,23 +309,7 @@ appset_only_env    = "${env.APPSET_ENV}"
                     when { expression { params.ACTION == 'infra-destroy' } }
                     steps {
                         script {
-                            withTf {
-                                sh '''
-                                  if aws eks describe-cluster --name $CLUSTER --region $AWS_REGION >/dev/null 2>&1; then
-                                    aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER
-                                    kubectl -n argocd delete applicationsets,applications --all --timeout=180s || true
-                                    kubectl get ns -o name | grep '^namespace/events-' | xargs -r kubectl delete --timeout=300s || true
-                                    kubectl get svc -A -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.namespace}{" "}{.metadata.name}{"\\n"}{end}' | \
-                                      while read ns name; do kubectl -n $ns delete svc $name --timeout=300s || true; done
-                                    sleep 90
-                                  else
-                                    echo "Aucun cluster : terraform destroy nettoiera seulement ce qui reste dans l'état"
-                                  fi
-                                  cd $TF_DIR
-                                  terraform destroy -input=false -auto-approve
-                                  rm -rf $ARGOCD_DIR
-                                '''
-                            }
+                            destroyInfra()
                         }
                     }
                 }
@@ -904,6 +917,29 @@ def withTf(Closure body) {
             string(credentialsId: 'grafana-admin-password', variable: 'TF_VAR_grafana_admin_password'),
             usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GH_USER', passwordVariable: 'TF_VAR_github_token')
         ]) { body() }
+    }
+}
+
+// Destruction complete : nettoyage du cluster (Argo CD, namespaces events-*, load balancers)
+// puis terraform destroy. Utilisee par ACTION=infra-destroy ET par RECREATE=true.
+// Doit etre appelee depuis le bloc Infrastructure AWS (variables CLUSTER, TF_DIR, AWS_REGION, ARGOCD_DIR).
+def destroyInfra() {
+    withTf {
+        sh '''
+          if aws eks describe-cluster --name $CLUSTER --region $AWS_REGION >/dev/null 2>&1; then
+            aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER
+            kubectl -n argocd delete applicationsets,applications --all --timeout=180s || true
+            kubectl get ns -o name | grep '^namespace/events-' | xargs -r kubectl delete --timeout=300s || true
+            kubectl get svc -A -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.namespace}{" "}{.metadata.name}{"\\n"}{end}' | \
+              while read ns name; do kubectl -n $ns delete svc $name --timeout=300s || true; done
+            sleep 90
+          else
+            echo "Aucun cluster : terraform destroy nettoiera seulement ce qui reste dans l'état"
+          fi
+          cd $TF_DIR
+          terraform destroy -input=false -auto-approve
+          rm -rf $ARGOCD_DIR
+        '''
     }
 }
 
