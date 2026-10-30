@@ -159,6 +159,7 @@ pipeline {
                         }
                         stage('Dépendances & IaC · Trivy FS') {
     steps {
+        sh ''
         
     }
 }
