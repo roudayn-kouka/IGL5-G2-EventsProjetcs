@@ -1,14 +1,14 @@
 output "devops_public_ip" {
   description = "IP élastique de l'usine DevOps"
-  value       = aws_eip.devops.public_ip
+  value       = one(aws_eip.devops[*].public_ip)
 }
 
 output "devops_urls" {
-  value = {
-    jenkins   = "https://jenkins.${aws_eip.devops.public_ip}.sslip.io"
-    sonarqube = "https://sonar.${aws_eip.devops.public_ip}.sslip.io"
-    nexus     = "https://nexus.${aws_eip.devops.public_ip}.sslip.io"
-  }
+  value = var.create_devops_ec2 ? {
+    jenkins   = "https://jenkins.${aws_eip.devops[0].public_ip}.sslip.io"
+    sonarqube = "https://sonar.${aws_eip.devops[0].public_ip}.sslip.io"
+    nexus     = "https://nexus.${aws_eip.devops[0].public_ip}.sslip.io"
+  } : {}
 }
 
 output "ecr_repository_url" {
@@ -16,7 +16,7 @@ output "ecr_repository_url" {
 }
 
 output "eks_cluster_name" {
-  value = module.eks.cluster_name
+  value = local.eks_cluster_name
 }
 
 output "region" {
@@ -25,7 +25,7 @@ output "region" {
 }
 
 output "kubeconfig_command" {
-  value = "aws eks update-kubeconfig --name ${module.eks.cluster_name} --region ${var.region}"
+  value = "aws eks update-kubeconfig --name ${local.eks_cluster_name} --region ${var.region}"
 }
 
 output "next_steps" {

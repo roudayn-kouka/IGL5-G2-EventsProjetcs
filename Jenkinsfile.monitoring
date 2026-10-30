@@ -1,0 +1,169 @@
+// Job infra : Terraform installe Prometheus + Grafana sur le cluster kind.
+// ACTION = plan-only (defaut) | apply | destroy | import
+// Credentials : kubeconfig-kind (Secret file), google-credentials (Username with password, mot de passe d'application Gmail)
+
+// Terraform dans un conteneur sur le reseau kind, qui partage les volumes de Jenkins
+def tf(String args) {
+  sh """
+    docker run --rm \
+      --network kind \
+      --volumes-from jenkins \
+      -v tfstate:/state \
+      -w ${env.WORKSPACE}/${env.TF_DIR} \
+      -e TF_IN_AUTOMATION=true \
+      -e TF_PLUGIN_CACHE_DIR=/state/plugin-cache \
+      -e TF_VAR_kubeconfig_path=${env.WORKSPACE}/${env.TF_DIR}/.kubeconfig \
+      hashicorp/terraform:1.9.8 ${args}
+  """
+}
+
+// Copie le kubeconfig (credential Secret file) dans le dossier Terraform, puis le supprime
+def withKube(Closure body) {
+  withCredentials([file(credentialsId: 'kubeconfig-kind', variable: 'KUBECONFIG_FILE')]) {
+    sh 'cp "$KUBECONFIG_FILE" "$WORKSPACE/$TF_DIR/.kubeconfig"'
+    try { body() }
+    finally { sh 'rm -f "$WORKSPACE/$TF_DIR/.kubeconfig"' }
+  }
+}
+
+// Approbation : ABORTED (et non echec) si personne ne clique dans le delai
+def approve(String msg, String okLabel) {
+  try {
+    timeout(time: 30, unit: 'MINUTES') {
+      input message: msg, ok: okLabel
+    }
+  } catch (err) {
+    currentBuild.result = 'ABORTED'
+    error('Approbation non donnee dans le delai')
+  }
+}
+
+// Notification e-mail : l'adresse Gmail vient du credential google-credentials
+def notifyInfra(String status, boolean withLog) {
+  try {
+    withCredentials([usernamePassword(credentialsId: 'gmail-credentials',
+                                      usernameVariable: 'GMAIL_USER',
+                                      passwordVariable: 'GMAIL_PSW')]) {
+      emailext from: env.GMAIL_USER,
+               to: env.GMAIL_USER,
+               subject: "[Infra] ${status} - ${params.ACTION} #${env.BUILD_NUMBER}",
+               body: "Job infra ${status} (${params.ACTION}) : ${env.BUILD_URL}console",
+               attachLog: withLog
+    }
+  } catch (Exception e) {
+    echo "Mail indisponible : ${e.message}"
+  }
+}
+
+pipeline {
+  agent any
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '10'))
+    timeout(time: 60, unit: 'MINUTES')
+  }
+
+  parameters {
+    choice(name: 'ACTION', choices: ['plan-only', 'apply', 'destroy', 'import'],
+           description: 'plan-only = rien ne change | apply = installe | destroy = supprime | import = rattache la release existante au state')
+  }
+
+  environment {
+    TRIVY_IMG = 'aquasec/trivy:0.56.2'
+    TF_DIR    = 'infra/terraform'
+  }
+
+  stages {
+
+    stage('Terraform setup') {
+      steps {
+        script {
+          sh 'docker run --rm -v tfstate:/state alpine mkdir -p /state/plugin-cache'
+          tf('fmt -check -recursive')
+          tf('init -input=false -reconfigure -backend-config=path=/state/events-monitoring.tfstate')
+          tf('validate')
+        }
+        sh '''
+          docker run --rm --volumes-from jenkins $TRIVY_IMG config \
+            --severity HIGH,CRITICAL --exit-code 0 --format table "$WORKSPACE/$TF_DIR" | tee trivy-iac.txt
+        '''
+      }
+    }
+
+    stage('Terraform import') {
+      when { expression { params.ACTION == 'import' } }
+      steps {
+        script {
+          withKube {
+            tf('import -input=false kubernetes_namespace.monitoring monitoring')
+            tf('import -input=false helm_release.monitoring monitoring/monitoring')
+          }
+        }
+      }
+    }
+
+    stage('Terraform plan') {
+      when { expression { params.ACTION in ['plan-only', 'apply'] } }
+      steps {
+        script {
+          withKube {
+            tf('plan -input=false -out=tfplan')
+            sh '''
+              docker run --rm --volumes-from jenkins -w "$WORKSPACE/$TF_DIR" \
+                hashicorp/terraform:1.9.8 show -no-color tfplan > "$WORKSPACE/tfplan.txt"
+            '''
+          }
+        }
+        archiveArtifacts artifacts: 'tfplan.txt', allowEmptyArchive: true
+      }
+    }
+
+    stage('Approbation : installer le monitoring') {
+      when { expression { params.ACTION == 'apply' } }
+      steps {
+        script { approve('Installer Prometheus + Grafana ? (plan dans la console et tfplan.txt)', 'Installer') }
+      }
+    }
+
+    stage('Terraform apply') {
+      when { expression { params.ACTION == 'apply' } }
+      steps {
+        script {
+          withKube { tf('apply -input=false tfplan') }
+        }
+        echo 'Monitoring installe. Grafana : kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80'
+      }
+    }
+
+    stage('Approbation : detruire le monitoring') {
+      when { expression { params.ACTION == 'destroy' } }
+      steps {
+        script { approve('Supprimer Prometheus + Grafana ?', 'Detruire') }
+      }
+    }
+
+    stage('Terraform destroy') {
+      when { expression { params.ACTION == 'destroy' } }
+      steps {
+        script {
+          withKube { tf('destroy -input=false -auto-approve') }
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      archiveArtifacts artifacts: 'tfplan.txt, trivy-iac.txt', allowEmptyArchive: true
+      sh 'rm -f $WORKSPACE/$TF_DIR/.kubeconfig $WORKSPACE/$TF_DIR/tfplan || true'
+    }
+    success {
+      script { notifyInfra('SUCCESS', false) }
+    }
+    failure {
+      script { notifyInfra('FAILURE', true) }
+    }
+  }
+}

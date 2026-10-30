@@ -1,58 +1,60 @@
-// Job infra : Terraform installe Prometheus + Grafana sur le cluster kind.
-// ACTION = plan-only (defaut) | apply | destroy | import
-// Credentials : kubeconfig-kind (Secret file), google-credentials (Username with password, mot de passe d'application Gmail)
+// =============================================================================
+//  Events Project · Jenkinsfile.infra (Ahlem Mastouri, feature/logistics)
+//  Crée / détruit l'infrastructure AWS (Learner Lab) avec le Terraform de l'équipe :
+//  platform/terraform (VPC + EKS + ECR + Argo CD + application racine).
+//
+//  Jenkins tourne sur le PC : Terraform en « mode PC » (variables de lab.auto.tfvars) :
+//      create_devops_ec2 = false   pas d'EC2 DevOps (Jenkins, Nexus, Sonar sont sur le PC)
+//      argocd_public     = true    NLB Argo CD public, ouvert seulement à mon IP (admin_cidr)
+//      appset_only_env   = logistics   seul l'environnement logistics est déployé
+//      eks_raw           = true    EKS en ressources simples (iam:GetRole refusé par le Learner Lab)
+//  État Terraform local (backend_override.tf généré ici) : pas de S3 ni de DynamoDB.
+//
+//  Job Jenkins : Pipeline > Pipeline script from SCM > Git, dépôt de l'application,
+//  credentials github-credentials, branche feature/logistics, Script Path = Jenkinsfile.infra.
+//
+//  ACTION = plan-only : init + validate + plan (ne change rien dans AWS)   <- défaut
+//  ACTION = apply     : plan + approbation + terraform apply + token Argo CD + ApplicationSet filtré
+//  ACTION = destroy   : approbation + nettoyage du cluster + terraform destroy
+//
+//  Credentials Jenkins : aws_access_key_id, aws_secret_access_key, aws_session_token (Secret text,
+//  à recopier à chaque session Learner Lab), grafana-admin-password (Secret text),
+//  github-credentials (Username + token), google-credentials (Gmail + mot de passe d'application).
+// =============================================================================
 
-// Terraform dans un conteneur sur le reseau kind, qui partage les volumes de Jenkins
-def tf(String args) {
-  sh """
-    docker run --rm \
-      --network kind \
-      --volumes-from jenkins \
-      -v tfstate:/state \
-      -w ${env.WORKSPACE}/${env.TF_DIR} \
-      -e TF_IN_AUTOMATION=true \
-      -e TF_PLUGIN_CACHE_DIR=/state/plugin-cache \
-      -e TF_VAR_kubeconfig_path=${env.WORKSPACE}/${env.TF_DIR}/.kubeconfig \
-      hashicorp/terraform:1.9.8 ${args}
-  """
+def withAws(Closure body) {
+  withCredentials([
+    string(credentialsId: 'aws_access_key_id',     variable: 'AWS_ACCESS_KEY_ID'),
+    string(credentialsId: 'aws_secret_access_key', variable: 'AWS_SECRET_ACCESS_KEY'),
+    string(credentialsId: 'aws_session_token',     variable: 'AWS_SESSION_TOKEN')
+  ]) { body() }
 }
 
-// Copie le kubeconfig (credential Secret file) dans le dossier Terraform, puis le supprime
-def withKube(Closure body) {
-  withCredentials([file(credentialsId: 'kubeconfig-kind', variable: 'KUBECONFIG_FILE')]) {
-    sh 'cp "$KUBECONFIG_FILE" "$WORKSPACE/$TF_DIR/.kubeconfig"'
-    try { body() }
-    finally { sh 'rm -f "$WORKSPACE/$TF_DIR/.kubeconfig"' }
+// Clés AWS + variables sensibles de Terraform (jamais écrites dans un fichier)
+def withTf(Closure body) {
+  withAws {
+    withCredentials([
+      string(credentialsId: 'grafana-admin-password', variable: 'TF_VAR_grafana_admin_password'),
+      usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GH_USER', passwordVariable: 'TF_VAR_github_token')
+    ]) { body() }
   }
 }
 
-// Approbation : ABORTED (et non echec) si personne ne clique dans le delai
-def approve(String msg, String okLabel) {
+def notify(String color, String text) {
+  // Slack (ignoré s'il n'est pas configuré)
+  try { slackSend(channel: '#igl5-g2-ci', color: color, message: "Ahlem Mastouri : " + text) }
+  catch (e) { echo "Slack non configuré : ${text}" }
+  // E-mail : l'adresse vient du credential google-credentials
   try {
-    timeout(time: 30, unit: 'MINUTES') {
-      input message: msg, ok: okLabel
-    }
-  } catch (err) {
-    currentBuild.result = 'ABORTED'
-    error('Approbation non donnee dans le delai')
-  }
-}
-
-// Notification e-mail : l'adresse Gmail vient du credential google-credentials
-def notifyInfra(String status, boolean withLog) {
-  try {
-    withCredentials([usernamePassword(credentialsId: 'gmail-credentials',
-                                      usernameVariable: 'GMAIL_USER',
-                                      passwordVariable: 'GMAIL_PSW')]) {
+    withCredentials([usernamePassword(credentialsId: 'google-credentials',
+                                      usernameVariable: 'GMAIL_USER', passwordVariable: 'GMAIL_PSW')]) {
       emailext from: env.GMAIL_USER,
                to: env.GMAIL_USER,
-               subject: "[Infra] ${status} - ${params.ACTION} #${env.BUILD_NUMBER}",
-               body: "Job infra ${status} (${params.ACTION}) : ${env.BUILD_URL}console",
-               attachLog: withLog
+               subject: "[Events INFRA] ${text}",
+               body: "${text}\n${env.BUILD_URL}console",
+               attachLog: (color == 'danger')
     }
-  } catch (Exception e) {
-    echo "Mail indisponible : ${e.message}"
-  }
+  } catch (e) { echo "E-mail non envoyé : ${e.message}" }
 }
 
 pipeline {
@@ -62,43 +64,80 @@ pipeline {
     timestamps()
     disableConcurrentBuilds()
     buildDiscarder(logRotator(numToKeepStr: '10'))
-    timeout(time: 60, unit: 'MINUTES')
+    timeout(time: 120, unit: 'MINUTES')
   }
 
   parameters {
-    choice(name: 'ACTION', choices: ['plan-only', 'apply', 'destroy', 'import'],
-           description: 'plan-only = rien ne change | apply = installe | destroy = supprime | import = rattache la release existante au state')
+    choice(name: 'ACTION', choices: ['plan-only', 'apply', 'destroy'],
+           description: 'plan-only = ne change rien | apply = crée VPC + EKS + ECR + Argo CD | destroy = tout supprimer')
+    string(name: 'CLUSTER_VERSION', defaultValue: '1.35',
+           description: 'Version Kubernetes en SUPPORT STANDARD (le support étendu coûte 6 fois plus). Liste : aws eks describe-cluster-versions')
   }
 
   environment {
-    TRIVY_IMG = 'aquasec/trivy:0.56.2'
-    TF_DIR    = 'infra/terraform'
+    AWS_REGION         = 'us-east-1'
+    AWS_DEFAULT_REGION = 'us-east-1'
+    CLUSTER            = 'fst-events'                       // = variable « project » de platform/terraform
+    TF_DIR             = 'platform/terraform'
+    // État Terraform dans le volume Jenkins (survit au redémarrage, n'est PAS dans Git).
+    TF_STATE           = '/var/jenkins_home/tfstate/fst-events.tfstate'
+    TF_IN_AUTOMATION   = 'true'
+    APPSET_ENV         = 'logistics'                        // seul environnement déployé
+    ARGOCD_DIR         = '/var/jenkins_home/argocd'         // adresse + token
+    ARGOCD_OPTS        = '--grpc-web --plaintext'           // Argo CD de l'équipe en HTTP (server.insecure)
+    KUBECONFIG         = "${WORKSPACE}/.kubeconfig"
   }
 
   stages {
 
     stage('Terraform setup') {
       steps {
-        script {
-          sh 'docker run --rm -v tfstate:/state alpine mkdir -p /state/plugin-cache'
-          tf('fmt -check -recursive')
-          tf('init -input=false -reconfigure -backend-config=path=/state/events-monitoring.tfstate')
-          tf('validate')
-        }
+        writeFile file: "${env.TF_DIR}/backend_override.tf", text: """terraform {
+  backend "local" {
+    path = "${env.TF_STATE}"
+  }
+}
+"""
         sh '''
-          docker run --rm --volumes-from jenkins $TRIVY_IMG config \
-            --severity HIGH,CRITICAL --exit-code 0 --format table "$WORKSPACE/$TF_DIR" | tee trivy-iac.txt
+          mkdir -p "$(dirname $TF_STATE)"
+          terraform version
+          trivy config --severity HIGH,CRITICAL --exit-code 0 --skip-dirs '**/.terraform' --format table -o trivy-iac.txt $TF_DIR
+          cd $TF_DIR
+          terraform init -input=false -reconfigure
+          terraform validate
         '''
       }
     }
 
-    stage('Terraform import') {
-      when { expression { params.ACTION == 'import' } }
+    stage('AWS identity') {
       steps {
         script {
-          withKube {
-            tf('import -input=false kubernetes_namespace.monitoring monitoring')
-            tf('import -input=false helm_release.monitoring monitoring/monitoring')
+          withAws {
+            try { sh 'aws sts get-caller-identity' }
+            catch (e) { error('AWS refuse les clés : recopie les 3 valeurs (Learner Lab > AWS Details > AWS CLI) dans les credentials Jenkins') }
+            env.LAB_ROLE_ARN = sh(script: 'aws iam get-role --role-name LabRole --query Role.Arn --output text', returnStdout: true).trim()
+            env.MY_IP        = sh(script: 'curl -fsS https://checkip.amazonaws.com', returnStdout: true).trim()
+          }
+          echo "LabRole : ${env.LAB_ROLE_ARN} · IP publique : ${env.MY_IP}"
+          writeFile file: "${env.TF_DIR}/lab.auto.tfvars", text: """region             = "${env.AWS_REGION}"
+lab_role_arn       = "${env.LAB_ROLE_ARN}"
+cluster_version    = "${params.CLUSTER_VERSION}"
+node_instance_type = "t3.large"
+admin_cidr         = "${env.MY_IP}/32"
+create_devops_ec2  = false
+eks_raw            = true
+argocd_public      = true
+appset_only_env    = "${env.APPSET_ENV}"
+"""
+        }
+      }
+    }
+
+    stage('Autoriser ton IP sur l\'API EKS') {
+      steps {
+        script {
+          withAws {
+            sh 'ALLOW_MISSING_EKS=1 bash platform/scripts/ensure-eks-access.sh'
           }
         }
       }
@@ -108,47 +147,140 @@ pipeline {
       when { expression { params.ACTION in ['plan-only', 'apply'] } }
       steps {
         script {
-          withKube {
-            tf('plan -input=false -out=tfplan')
+          withTf {
             sh '''
-              docker run --rm --volumes-from jenkins -w "$WORKSPACE/$TF_DIR" \
-                hashicorp/terraform:1.9.8 show -no-color tfplan > "$WORKSPACE/tfplan.txt"
+              cd $TF_DIR
+              terraform plan -input=false -out=tfplan
+              terraform show -no-color tfplan > "$WORKSPACE/tfplan.txt"
             '''
           }
         }
-        archiveArtifacts artifacts: 'tfplan.txt', allowEmptyArchive: true
       }
     }
 
-    stage('Approbation : installer le monitoring') {
+    stage('Approbation : créer l\'infrastructure') {
       when { expression { params.ACTION == 'apply' } }
       steps {
-        script { approve('Installer Prometheus + Grafana ? (plan dans la console et tfplan.txt)', 'Installer') }
-      }
-    }
-
-    stage('Terraform apply') {
-      when { expression { params.ACTION == 'apply' } }
-      steps {
-        script {
-          withKube { tf('apply -input=false tfplan') }
+        timeout(time: 30, unit: 'MINUTES') {
+          input message: 'Créer VPC + EKS + ECR + Argo CD maintenant ? (lis tfplan.txt dans les artefacts ; ça consomme du crédit tant que ça tourne)', ok: 'Créer'
         }
-        echo 'Monitoring installe. Grafana : kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80'
       }
     }
 
-    stage('Approbation : detruire le monitoring') {
+    stage('Déploiement AWS (terraform apply)') {
+      when { expression { params.ACTION == 'apply' } }
+      steps {
+        script {
+          withTf {
+            sh '''
+              cd $TF_DIR
+              terraform apply -input=false tfplan
+              aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER
+              kubectl wait --for=condition=Ready nodes --all --timeout=600s
+              kubectl get nodes
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Argo CD : adresse + token') {
+      when { expression { params.ACTION == 'apply' } }
+      steps {
+        script {
+          withAws {
+            sh '''
+              set +x
+              aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER >/dev/null
+              H=""
+              for i in $(seq 1 60); do
+                H=$(kubectl -n argocd get svc argocd-server -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+                [ -n "$H" ] && break
+                echo "Load balancer Argo CD pas encore créé ($i/60)..."; sleep 10
+              done
+              [ -n "$H" ] || { echo "Le NLB d'Argo CD n'a pas d'adresse."; exit 1; }
+              PW=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)
+
+              for i in $(seq 1 40); do
+                argocd login "$H:80" --username admin --password "$PW" >/dev/null 2>&1 && break
+                echo "Argo CD pas encore joignable ($i/40)..."; sleep 15
+              done
+              TOKEN=$(argocd account generate-token --account jenkins --server "$H:80")
+              [ -n "$TOKEN" ] || { echo "Génération du token échouée."; exit 1; }
+
+              umask 077
+              mkdir -p "$ARGOCD_DIR"
+              printf '%s' "$H:80"  > "$ARGOCD_DIR/server"
+              printf '%s' "$TOKEN" > "$ARGOCD_DIR/token"
+              echo "Argo CD joignable sur http://$H ; token écrit dans $ARGOCD_DIR"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('ApplicationSet : environnement logistics') {
+      when { expression { params.ACTION == 'apply' } }
+      steps {
+        script {
+          withAws {
+            sh '''
+              aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER >/dev/null
+              for i in $(seq 1 60); do
+                kubectl -n argocd get appproject events >/dev/null 2>&1 && break
+                echo "En attente du projet Argo CD « events » ($i/60)..."; sleep 10
+              done
+              kubectl -n argocd get appproject events
+              sed "s#envs/[*]/config.json#envs/$APPSET_ENV/config.json#" platform/gitops/platform/apps/40-events-environments.yaml | kubectl apply -f -
+              kubectl -n argocd get applicationsets,applications
+
+              for i in $(seq 1 90); do
+                H=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+                [ -n "$H" ] && { echo "Load balancer ingress-nginx : $H"; exit 0; }
+                echo "En attente d'ingress-nginx ($i/90)..."; sleep 10
+              done
+              echo "ingress-nginx n'a pas de load balancer : regarde l'application ingress-nginx dans Argo CD."; exit 1
+            '''
+          }
+          echo """Infrastructure prête.
+- L'application events-logistics apparaît dans Argo CD après le premier run du Jenkinsfile (~1 à 3 min).
+- Grafana : mot de passe du credential grafana-admin-password (utilisateur admin)
+  kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80  -> http://localhost:3000
+- Argo CD : http://<adresse dans ${env.ARGOCD_DIR}/server> (utilisateur admin)"""
+        }
+      }
+    }
+
+    stage('Approbation : tout détruire') {
       when { expression { params.ACTION == 'destroy' } }
       steps {
-        script { approve('Supprimer Prometheus + Grafana ?', 'Detruire') }
+        timeout(time: 30, unit: 'MINUTES') {
+          input message: 'DÉTRUIRE le cluster, les nœuds, le VPC et le dépôt ECR ?', ok: 'Détruire'
+        }
       }
     }
 
-    stage('Terraform destroy') {
+    stage('Destruction (terraform destroy)') {
       when { expression { params.ACTION == 'destroy' } }
       steps {
         script {
-          withKube { tf('destroy -input=false -auto-approve') }
+          withTf {
+            sh '''
+              if aws eks describe-cluster --name $CLUSTER --region $AWS_REGION >/dev/null 2>&1; then
+                aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER
+                kubectl -n argocd delete applicationsets,applications --all --timeout=180s || true
+                kubectl get ns -o name | grep '^namespace/events-' | xargs -r kubectl delete --timeout=300s || true
+                kubectl get svc -A -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.namespace}{" "}{.metadata.name}{"\\n"}{end}' | \
+                  while read ns name; do kubectl -n $ns delete svc $name --timeout=300s || true; done
+                sleep 90
+              else
+                echo "Aucun cluster : terraform destroy nettoiera seulement ce qui reste dans l'état"
+              fi
+              cd $TF_DIR
+              terraform destroy -input=false -auto-approve
+              rm -rf $ARGOCD_DIR
+            '''
+          }
         }
       }
     }
@@ -157,13 +289,9 @@ pipeline {
   post {
     always {
       archiveArtifacts artifacts: 'tfplan.txt, trivy-iac.txt', allowEmptyArchive: true
-      sh 'rm -f $WORKSPACE/$TF_DIR/.kubeconfig $WORKSPACE/$TF_DIR/tfplan || true'
+      sh 'rm -f $KUBECONFIG $TF_DIR/backend_override.tf $TF_DIR/lab.auto.tfvars $TF_DIR/tfplan'
     }
-    success {
-      script { notifyInfra('SUCCESS', false) }
-    }
-    failure {
-      script { notifyInfra('FAILURE', true) }
-    }
+    success { script { notify('good',   "INFRA ${params.ACTION} OK  #${env.BUILD_NUMBER}") } }
+    failure { script { notify('danger', "INFRA ${params.ACTION} ÉCHEC  #${env.BUILD_NUMBER}") } }
   }
 }

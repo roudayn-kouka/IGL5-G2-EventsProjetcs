@@ -6,7 +6,7 @@
 
 resource "kubernetes_namespace" "monitoring" {
   metadata { name = "monitoring" }
-  depends_on = [module.eks]
+  depends_on = [module.eks, aws_eks_node_group.lab]
 }
 
 # Secrets consommés par la plateforme (jamais commités dans Git)
@@ -43,11 +43,13 @@ resource "helm_release" "argocd" {
     platform_repo_url = var.platform_repo_url
     github_token      = var.github_token
     slack_bot_token   = var.slack_bot_token
-    devops_cidr       = "${aws_eip.devops.public_ip}/32"
+    devops_cidr       = var.create_devops_ec2 ? "${aws_eip.devops[0].public_ip}/32" : ""
+    argocd_public     = var.argocd_public
+    admin_cidr        = var.admin_cidr
     vpc_cidr          = module.vpc.vpc_cidr_block
   })]
 
-  depends_on = [module.eks]
+  depends_on = [module.eks, aws_eks_node_group.lab]
 }
 
 # Application racine : Argo CD se gère lui-même à partir de platform/gitops/platform/apps sur main.
@@ -63,11 +65,14 @@ resource "helm_release" "argocd_root" {
       platform = {
         namespace = "argocd"
         project   = "default"
-        source = {
+        source = merge({
           repoURL        = var.platform_repo_url
           targetRevision = "main"
           path           = "platform/gitops/platform/apps"
-        }
+          },
+          # appset_only_env : l'ApplicationSet (40-...) est appliqué par Jenkins avec un seul environnement
+          var.appset_only_env == "" ? {} : { directory = { exclude = "40-events-environments.yaml" } }
+        )
         destination = {
           server    = "https://kubernetes.default.svc"
           namespace = "argocd"

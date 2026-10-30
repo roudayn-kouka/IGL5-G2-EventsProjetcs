@@ -2,6 +2,7 @@
 #  EC2 « usine DevOps » : Jenkins, Nexus, SonarQube (configurée ensuite par Ansible)
 # =============================================================================
 data "aws_ami" "ubuntu" {
+  count       = var.create_devops_ec2 ? 1 : 0
   most_recent = true
   owners      = ["099720109477"] # Canonical
   filter {
@@ -11,11 +12,13 @@ data "aws_ami" "ubuntu" {
 }
 
 resource "aws_key_pair" "devops" {
+  count      = var.create_devops_ec2 ? 1 : 0
   key_name   = "${var.project}-devops"
   public_key = file(pathexpand(var.ssh_public_key_path))
 }
 
 resource "aws_security_group" "devops" {
+  count       = var.create_devops_ec2 ? 1 : 0
   name        = "${var.project}-devops"
   description = "Usine DevOps : HTTPS public (Caddy), SSH restreint"
   vpc_id      = module.vpc.vpc_id
@@ -73,7 +76,7 @@ resource "aws_security_group" "devops" {
 
 # Rôle IAM de l'instance : Jenkins pousse dans ECR sans aucune clé AWS stockée
 resource "aws_iam_role" "devops" {
-  count = local.use_lab_role ? 0 : 1
+  count = (local.use_lab_role || !var.create_devops_ec2) ? 0 : 1
   name  = "${var.project}-devops"
   assume_role_policy = jsonencode({
     Version   = "2012-10-17"
@@ -82,7 +85,7 @@ resource "aws_iam_role" "devops" {
 }
 
 resource "aws_iam_role_policy" "devops_ecr" {
-  count = local.use_lab_role ? 0 : 1
+  count = (local.use_lab_role || !var.create_devops_ec2) ? 0 : 1
   name  = "ecr-push"
   role  = aws_iam_role.devops[0].id
   policy = jsonencode({
@@ -100,17 +103,18 @@ resource "aws_iam_role_policy" "devops_ecr" {
 }
 
 resource "aws_iam_instance_profile" "devops" {
-  count = local.use_lab_role ? 0 : 1
+  count = (local.use_lab_role || !var.create_devops_ec2) ? 0 : 1
   name  = "${var.project}-devops"
   role  = aws_iam_role.devops[0].name
 }
 
 resource "aws_instance" "devops" {
-  ami                    = data.aws_ami.ubuntu.id
+  count                  = var.create_devops_ec2 ? 1 : 0
+  ami                    = data.aws_ami.ubuntu[0].id
   instance_type          = var.devops_instance_type
   subnet_id              = module.vpc.public_subnets[0]
-  vpc_security_group_ids = [aws_security_group.devops.id]
-  key_name               = aws_key_pair.devops.key_name
+  vpc_security_group_ids = [aws_security_group.devops[0].id]
+  key_name               = aws_key_pair.devops[0].key_name
   iam_instance_profile   = local.use_lab_role ? "LabInstanceProfile" : aws_iam_instance_profile.devops[0].name
 
   root_block_device {
@@ -128,7 +132,8 @@ resource "aws_instance" "devops" {
 }
 
 resource "aws_eip" "devops" {
-  instance = aws_instance.devops.id
+  count    = var.create_devops_ec2 ? 1 : 0
+  instance = aws_instance.devops[0].id
   domain   = "vpc"
   tags     = { Name = "${var.project}-devops" }
 }

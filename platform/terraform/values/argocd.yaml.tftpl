@@ -10,6 +10,7 @@ configs:
     policy.csv: |
       p, role:jenkins, applications, get, events/*, allow
       p, role:jenkins, applications, sync, events/*, allow
+      p, role:jenkins, projects, get, events, allow
       g, jenkins, role:jenkins
 %{ if github_token != "" ~}
   credentialTemplates:
@@ -21,13 +22,20 @@ configs:
 
 server:
   service:
-    # NLB INTERNE : seul Jenkins (dans le VPC) parle à l'API Argo CD ; l'interface s'ouvre par port-forward
+    # Par défaut : NLB INTERNE, seul Jenkins (dans le VPC) parle à l'API Argo CD ; l'interface s'ouvre par port-forward.
+    # argocd_public = true (Jenkins sur un PC) : NLB public, mais joignable seulement depuis admin_cidr.
     type: LoadBalancer
     annotations:
       service.beta.kubernetes.io/aws-load-balancer-type: nlb
+%{ if !argocd_public ~}
       service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+%{ endif ~}
     loadBalancerSourceRanges:
+%{ if argocd_public ~}
+      - ${admin_cidr}
+%{ else ~}
       - ${vpc_cidr}
+%{ endif ~}
 
 # Argo CD Notifications -> Slack (#igl5-g2-deploiements)
 notifications:

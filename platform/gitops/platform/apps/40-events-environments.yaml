@@ -35,17 +35,27 @@ spec:
         notifications.argoproj.io/subscribe.on-health-degraded.slack: igl5-g2-deploiements
     spec:
       project: events
-      sources:
-        - repoURL: https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git
-          targetRevision: main
-          path: platform/gitops/charts/events-app
-          helm:
-            valueFiles:
-              - 'values-{{.profile}}.yaml'
-              - '$values/envs/{{.path.basename}}/values.yaml'
-        - repoURL: https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git
-          targetRevision: gitops
-          ref: values
+      # Le chart est sur feature/participant ; les valeurs dynamiques viennent du config.json
+      # de la branche gitops, lu par le generateur ApplicationSet.
+      source:
+        repoURL: https://github.com/roudayn-kouka/IGL5-G2-EventsProjetcs.git
+        targetRevision: feature/participant
+        path: platform/gitops/charts/events-app
+        helm:
+          valueFiles:
+            - 'values-{{.profile}}.yaml'
+          parameters:
+            - name: feature
+              value: '{{.feature}}'
+            - name: owner
+              value: '{{.owner}}'
+            - name: image.repository
+              value: '{{.imageRepository}}'
+            - name: image.tag
+              value: '{{.imageTag}}'
+              forceString: true
+            - name: ingress.host
+              value: '{{.host}}'
       destination:
         server: https://kubernetes.default.svc
         namespace: '{{.namespace}}'

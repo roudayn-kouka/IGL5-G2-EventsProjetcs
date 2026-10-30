@@ -7,7 +7,7 @@ variable "project" {
 variable "region" {
   description = "Région AWS (Paris)"
   type        = string
-  default     = "eu-west-3"
+  default     = "us-east-1"
 }
 
 variable "cluster_version" {
@@ -73,4 +73,29 @@ variable "lab_role_arn" {
   description = "Compte AWS Academy : ARN de « LabRole » (aucun rôle IAM ne peut être créé). Laisser vide sinon."
   type        = string
   default     = ""
+}
+
+# --- Mode « Jenkins sur un PC » (Learner Lab) : les valeurs par défaut gardent le comportement d'équipe ---
+variable "create_devops_ec2" {
+  description = "false = pas d'EC2 « usine DevOps » (Jenkins, Nexus, SonarQube tournent ailleurs, ex. Docker sur un PC)"
+  type        = bool
+  default     = true
+}
+
+variable "argocd_public" {
+  description = "true = le NLB d'Argo CD est public, restreint à admin_cidr (Jenkins hors du VPC) ; false = NLB interne au VPC"
+  type        = bool
+  default     = false
+}
+
+variable "appset_only_env" {
+  description = "Vide = tous les dossiers envs/ de la branche gitops. Sinon un seul environnement (ex. participant) : l'ApplicationSet n'est pas géré par l'application racine, Jenkins l'applique filtré."
+  type        = string
+  default     = ""
+}
+
+variable "eks_raw" {
+  description = "true = cluster EKS en ressources simples (aws_eks_cluster) au lieu du module communautaire. Nécessaire sur certains Learner Lab : le module lit iam:GetRole sur le rôle de la session (voclabs), refusé par une politique explicite. Exige lab_role_arn."
+  type        = bool
+  default     = false
 }
