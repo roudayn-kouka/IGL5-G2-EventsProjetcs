@@ -46,7 +46,7 @@ def notify(String color, String text) {
   catch (e) { echo "Slack non configuré : ${text}" }
   // E-mail : l'adresse vient du credential google-credentials
   try {
-    withCredentials([usernamePassword(credentialsId: 'google-credentials',
+    withCredentials([usernamePassword(credentialsId: 'gmail-credentials',
                                       usernameVariable: 'GMAIL_USER', passwordVariable: 'GMAIL_PSW')]) {
       emailext from: env.GMAIL_USER,
                to: env.GMAIL_USER,
