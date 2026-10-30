@@ -217,33 +217,64 @@ pipeline {
 
                 // ------------------------------------------------------------ 9
                 stage('Image Docker & docker hub') {
-                    steps {
-                        sh '''
-                          docker build --pull \
-                            --label org.opencontainers.image.revision=$GIT_SHORT \
-                            --label org.opencontainers.image.version=$APP_VERSION \
-                            --label tn.fst.feature=$FEATURE_SLUG \
-                            --label tn.fst.owner=$OWNER_SLUG \
-                            -t $IMAGE .
-                        '''
-                        // Publication aussi sur Docker Hub : <utilisateur>/events-app:<tag> et :latest
-                        // Credential Jenkins « dockerhub-credentials » (Username + access token Docker Hub)
-                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials',
-                                                          usernameVariable: 'DH_USER', passwordVariable: 'DH_TOKEN')]) {
-                            sh '''
-                              set +x
-                              HUB_IMAGE="$DH_USER/$APP_NAME"
-                              echo "$DH_TOKEN" | docker login --username "$DH_USER" --password-stdin
-                              docker tag "$IMAGE" "$HUB_IMAGE:$IMAGE_TAG"
-                              docker tag "$IMAGE" "$HUB_IMAGE:latest"
-                              docker push "$HUB_IMAGE:$IMAGE_TAG"
-                              docker push "$HUB_IMAGE:latest"
-                              docker logout
-                              echo "Docker Hub : $HUB_IMAGE:$IMAGE_TAG"
-                            '''
-                        }
-                    }
+    steps {
+        // Build the application image
+        sh '''
+            set -eu
+
+            docker build --pull \
+              --label "org.opencontainers.image.revision=$GIT_SHORT" \
+              --label "org.opencontainers.image.version=$APP_VERSION" \
+              --label "tn.fst.feature=$FEATURE_SLUG" \
+              --label "tn.fst.owner=$OWNER_SLUG" \
+              -t "$IMAGE" .
+        '''
+
+        // Docker Hub is optional: do not block AWS deployment
+        // if Docker Hub is temporarily unreachable.
+        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+            withCredentials([
+                usernamePassword(
+                    credentialsId: 'dockerhub-credentials',
+                    usernameVariable: 'DH_USER',
+                    passwordVariable: 'DH_TOKEN'
+                )
+            ]) {
+                retry(3) {
+                    sh '''
+                        set -eu
+                        set +x
+
+                        HUB_IMAGE="$DH_USER/$APP_NAME"
+
+                        # Temporary Docker credentials directory
+                        export DOCKER_CONFIG
+                        DOCKER_CONFIG="$(mktemp -d)"
+                        trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+
+                        # Authenticate securely
+                        printf '%s' "$DH_TOKEN" |
+                          docker login \
+                            --username "$DH_USER" \
+                            --password-stdin
+
+                        # Tag image
+                        docker tag "$IMAGE" "$HUB_IMAGE:$IMAGE_TAG"
+                        docker tag "$IMAGE" "$HUB_IMAGE:latest"
+
+                        # Publish image
+                        docker push "$HUB_IMAGE:$IMAGE_TAG"
+                        docker push "$HUB_IMAGE:latest"
+
+                        docker logout
+
+                        echo "Docker Hub : $HUB_IMAGE:$IMAGE_TAG"
+                    '''
                 }
+            }
+        }
+    }
+}
 
                 // -------------------------Take so long to install and run--------------------------------- 10
                 // stage('Scan image · Trivy') {
