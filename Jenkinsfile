@@ -158,14 +158,26 @@ pipeline {
                             }
                         }
                         stage('Dépendances & IaC · Trivy FS') {
-                            steps {
-                                sh '''
-                                  trivy fs --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 0 \
-                                    --format table --output trivy-fs.txt .
-                                  cat trivy-fs.txt
-                                '''
-                            }
-                        }
+    steps {
+        sh '''
+          set -eu
+
+          mkdir -p /var/jenkins_home/trivy-cache
+
+          trivy fs \
+            --cache-dir /var/jenkins_home/trivy-cache \
+            --timeout 20m \
+            --db-repository ghcr.io/aquasecurity/trivy-db:2 \
+            --scanners vuln,misconfig \
+            --severity HIGH,CRITICAL \
+            --exit-code 0 \
+            --format table \
+            --output trivy-fs.txt .
+
+          cat trivy-fs.txt
+        '''
+    }
+}
                     }
                 }
 
