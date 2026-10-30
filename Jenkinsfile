@@ -447,6 +447,22 @@ terraform -chdir=platform/terraform apply -input=false -lock-timeout=5m "$plan_f
             }
         }
 
+        stage('Preflight Argo CD tunnel') {
+            when { expression { env.DEPLOY == 'true' } }
+            steps {
+                sh '''#!/usr/bin/env bash
+set -euo pipefail
+: "${ARGOCD_SERVER:?ARGOCD_SERVER must be configured}"
+if ! curl -fsS --connect-timeout 5 --max-time 10 "http://${ARGOCD_SERVER}/api/version" >/dev/null; then
+  echo "ERROR: Argo CD tunnel ${ARGOCD_SERVER} is unavailable from the Jenkins agent." >&2
+  echo "Start the Compose-managed events-argocd-tunnel service and refresh its Academy credentials if they expired." >&2
+  exit 1
+fi
+echo "Argo CD tunnel ${ARGOCD_SERVER} is reachable."
+'''
+            }
+        }
+
         stage('Image Docker') {
             when { expression { env.DEPLOY == 'true' || env.LOCAL_DEMO == 'true' } }
             steps {
@@ -686,7 +702,7 @@ EOF
                       APP="events-$ENV_NAME"
                       WANTED=$(cat gitops-revision.txt)
                       for i in $(seq 1 60); do
-                        if ! J=$(argocd app get "$APP" --refresh -o json 2>&1); then
+                        if ! J=$(argocd app get "$APP" --server "$ARGOCD_SERVER" --grpc-web --plaintext --refresh -o json 2>&1); then
                           echo "ERROR: Cannot query Argo CD at ${ARGOCD_SERVER:-<unset>}." >&2
                           echo "Start the trusted events-argocd-tunnel helper and verify its Academy session, then retry." >&2
                           printf '%s\n' "$J" >&2

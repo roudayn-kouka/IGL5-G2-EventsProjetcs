@@ -229,40 +229,58 @@ admin UI, run this foreground command and keep the terminal open:
 kubectl -n argocd port-forward --address 127.0.0.1 service/argocd-server 8085:80
 ```
 
-localhost inside the Jenkins agent is not Windows localhost. For Jenkins, use the
-separate tunnel image on the existing private Docker network. It publishes NO host
-ports. It authenticates to EKS using a dedicated local Academy shared-credentials
-file; Argo still requires its own restricted Jenkins API token. All network members
-are trusted local CI containers; untrusted containers must not join jenkins-net.
+localhost inside the Jenkins agent is not Windows localhost. The Compose-managed
+`events-argocd-tunnel` service provides Jenkins access on the existing private
+Docker network. It publishes **no host ports**, starts automatically after Docker
+restarts (`unless-stopped`), and has a health check against the Argo version API.
+It authenticates to EKS using a dedicated local Academy shared-credentials file;
+Argo still requires its own restricted Jenkins API token. All network members are
+trusted local CI containers; untrusted containers must not join `jenkins-net`.
 Plain HTTP is confined to this local Docker network; upstream Kubernetes traffic
-uses TLS. Stop/remove the tunnel after testing. Reconnect if port-forward exits or
-credentials expire. The helper is AMD64, matching the existing local agent.
+uses TLS. The helper is AMD64, matching the existing local agent.
 
 ```powershell
-# Prepare a dedicated directory OUTSIDE the repo containing only this session's
-# AWS shared-credentials file, named credentials, with a [default] lab profile.
-# Enter credentials through your secure local workflow; never paste them in chat.
+# Prepare a dedicated directory OUTSIDE the repo containing ONLY this session's
+# AWS shared-credentials file, named `credentials`, with a [default] lab profile.
+# Enter credentials through your secure local workflow; never paste them in chat
+# or add them to .env. This file is mounted read-only and is not copied into Docker.
 $tunnelCredentials = Join-Path $env:LOCALAPPDATA 'events-demo\aws'
 if (!(Test-Path (Join-Path $tunnelCredentials 'credentials'))) { throw 'Prepare the dedicated temporary credentials file first' }
-docker build -t events-argocd-tunnel:demo platform/scripts/argocd-tunnel
-docker run --rm --name events-argocd-tunnel --network jenkins-net `
-  --mount "type=bind,source=$tunnelCredentials,target=/aws,readonly" `
-  -e AWS_SHARED_CREDENTIALS_FILE=/aws/credentials `
-  -e AWS_REGION=us-east-1 -e EKS_CLUSTER_NAME=fst-events `
-  events-argocd-tunnel:demo
+
+# This environment variable is read only by Docker Compose at runtime.
+$env:ARGOCD_TUNNEL_CREDENTIALS_DIR = $tunnelCredentials
+$env:AWS_REGION = 'us-east-1'
+$env:EKS_CLUSTER_NAME = 'fst-events'
+docker compose --env-file ci/local-jenkins/.env -f ci/local-jenkins/compose.yaml up -d --build argocd-tunnel
+docker compose --env-file ci/local-jenkins/.env -f ci/local-jenkins/compose.yaml ps argocd-tunnel
 ```
 
-Do not add -p or --publish. Keep the foreground process running. In a second terminal:
+Do not add `-p` or `--publish`. Verify from the Jenkins agent:
 
 ```powershell
 docker exec events-jenkins-agent curl -fsS http://events-argocd-tunnel:8080/api/version
 ```
 
-Only a successful response verifies actual agent-to-Argo connectivity. No cluster
-exists yet, so that connectivity was not tested during implementation. Set existing
-Jenkins environment values manually through the normal secure admin workflow:
+Only a successful response verifies actual agent-to-Argo connectivity. The Jenkins
+preflight stage runs this same check before Docker/ECR promotion and fails quickly
+with a tunnel-specific error when it is unavailable. If Academy credentials expire,
+replace only the dedicated `credentials` file, then restart the service:
+
+```powershell
+docker compose --env-file ci/local-jenkins/.env -f ci/local-jenkins/compose.yaml restart argocd-tunnel
+docker compose --env-file ci/local-jenkins/.env -f ci/local-jenkins/compose.yaml logs --tail 50 argocd-tunnel
+```
+
+To stop the tunnel while preserving the agent and all named volumes:
+
+```powershell
+docker compose --env-file ci/local-jenkins/.env -f ci/local-jenkins/compose.yaml stop argocd-tunnel
+```
+
+Set existing Jenkins environment values manually through the normal secure admin workflow:
 AWS_REGION=us-east-1; ECR_REGISTRY from the ecr_registry output;
-ARGOCD_SERVER=events-argocd-tunnel:8080; existing ARGOCD_OPTS already uses grpc-web/plaintext.
+ARGOCD_SERVER=events-argocd-tunnel:8080. The pipeline invokes the Argo CLI with
+explicit `--grpc-web --plaintext` options.
 Provision the existing argocd-token credential securely, using Argo's Jenkins account
 with get/sync rights for events/*; do not expose tokens in console output/chat.
 Set APPS_DOMAIN from ingress DNS/IP after the ingress NLB is ready. The existing

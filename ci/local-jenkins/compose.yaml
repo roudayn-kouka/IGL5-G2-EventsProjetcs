@@ -29,6 +29,47 @@ services:
     group_add:
       - "0"
 
+  argocd-tunnel:
+    image: events-argocd-tunnel:demo
+    build:
+      context: ../../platform/scripts/argocd-tunnel
+    container_name: events-argocd-tunnel
+    hostname: events-argocd-tunnel
+    restart: unless-stopped
+    init: true
+    depends_on:
+      agent:
+        condition: service_started
+    environment:
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      EKS_CLUSTER_NAME: ${EKS_CLUSTER_NAME:-fst-events}
+      AWS_SHARED_CREDENTIALS_FILE: /aws/credentials
+      AWS_CONFIG_FILE: /dev/null
+      AWS_EC2_METADATA_DISABLED: "true"
+    volumes:
+      # This is a dedicated [default] Academy profile outside the repository.
+      # No credential is baked into the image or copied into a Docker volume.
+      - type: bind
+        source: ${ARGOCD_TUNNEL_CREDENTIALS_DIR:-./.argocd-tunnel-credentials-not-configured}/credentials
+        target: /aws/credentials
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /work:uid=1000,gid=1000,mode=0700
+    networks:
+      - jenkins
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS --max-time 5 http://127.0.0.1:8080/api/version >/dev/null"]
+      interval: 15s
+      timeout: 6s
+      retries: 5
+      start_period: 45s
+
 networks:
   jenkins:
     external: true
