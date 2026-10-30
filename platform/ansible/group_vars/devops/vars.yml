@@ -29,7 +29,9 @@ sonarqube_internal_url: http://sonarqube:9000
 # API SonarQube appelée par Ansible depuis l'hôte EC2 : le nom « sonarqube » n'y est pas résolu
 # (réseau Docker), on passe donc par Caddy comme nexus_config.
 sonarqube_api_url: "https://sonar.{{ base_domain }}"
-sonar_webhook_url: http://jenkins:8080/sonarqube-webhook/
+# URL publique (Caddy) : SonarQube refuse les webhooks vers des adresses privées
+# (sonar.validateWebhooks), dont l'IP Docker de « jenkins ».
+sonar_webhook_url: "https://jenkins.{{ base_domain }}/sonarqube-webhook/"
 github_webhook_url: "https://jenkins.{{ base_domain }}/github-webhook/"
 
 # Secrets : définis dans vault.yml (chiffré avec ansible-vault)
