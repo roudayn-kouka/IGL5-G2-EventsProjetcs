@@ -50,9 +50,7 @@ pipeline {
         SONAR_PLUGIN       = 'org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922'
         MVN                = 'sh ./mvnw -B -ntp'             // wrapper du dépôt : pas besoin de Maven dans Jenkins
         MAIL_TO            = 'fbaraket48@gmail.com'          // destinataire des e-mails de build (en plus de Slack)
-        // Vide = smoke tests et ZAP passent par le load balancer (curl --resolve).
-        // Sinon URL de base, ex. http://host.docker.internal:8083/events (un port-forward lancé sur ton PC) : sans --resolve.
-        SMOKE_BASE_URL     = ''
+        
     }
 
     stages {
@@ -450,18 +448,9 @@ ingress:
                                 '''
                             }
                         }
-                        stage('DAST · OWASP ZAP') {
-                            steps {
-                                // rapport seulement (|| true) : ZAP ne bloque jamais sur une feature
-                                sh '''
-                                  if [ -n "$SMOKE_BASE_URL" ]; then
-                                    docker run --rm $ZAP_IMAGE zap-baseline.py -t "$SMOKE_BASE_URL/" -I -m 2 || true
-                                  else
-                                    docker run --rm --add-host "$APP_HOST:$LB_IP" $ZAP_IMAGE zap-baseline.py -t "http://$APP_HOST/events/" -I -m 2 || true
-                                  fi
-                                '''
-                            }
-                        }
+                        stage('DAST · OWASP ZAP') {                            
+                        steps {                                // rapport seulement (|| true) : ZAP ne bloque jamais sur une feature                                s
+                         sh 'docker run --rm --add-host "$APP_HOST:$LB_IP" $ZAP_IMAGE zap-baseline.py -t "http://$APP_HOST/events/" -I -m 2 || true'                            }                        }
                     }
                 }
             }
