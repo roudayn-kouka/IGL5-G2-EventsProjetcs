@@ -10,6 +10,8 @@ configs:
     policy.csv: |
       p, role:jenkins, applications, get, events/*, allow
       p, role:jenkins, applications, sync, events/*, allow
+      # « argocd app get » (CLI 2.13 et 3.x) lit aussi l'AppProject : sans ce droit, PermissionDenied
+      p, role:jenkins, projects, get, events, allow
       g, jenkins, role:jenkins
 %{ if github_token != "" ~}
   credentialTemplates:

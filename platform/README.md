@@ -81,7 +81,7 @@ Secrets d'exemple : `ansible/group_vars/devops/vault.yml.example`. Copiez-le ver
 | `gitops/platform/storage-class/gp3.yaml` | Provisionneur EBS CSI, volume `gp3` chiffré, `WaitForFirstConsumer`, `reclaimPolicy: Delete`. |
 | `gitops/platform/apps/20-monitoring.yaml` | Prometheus, Alertmanager et Grafana. |
 | `gitops/platform/apps/30-monitoring-config.yaml` | Application de configuration de supervision. |
-| `gitops/platform/apps/40-events-environments.yaml` | ApplicationSet multi-sources : chaque `envs/<env>/config.json` de la branche `gitops` devient `events-<env>`; chart lu sur `main`, `values.yaml` lu sur `gitops` (`ref: values`). |
+| `gitops/platform/apps/40-events-environments.yaml` | ApplicationSet multi-sources : chaque `envs/<env>/config.json` de la branche `gitops` devient `events-<env>`; chart (`envs/<env>/chart`, copié par Jenkins à chaque promotion) et `values.yaml` (`ref: values`) lus à la **même** révision de `gitops` (exigé par Argo CD 2.13). |
 
 L'ApplicationSet et ses Applications ont une destination `events-*`; la StorageClass est une ressource de plateforme déployée séparément par l'application du projet `default`.
 

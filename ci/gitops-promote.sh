@@ -9,7 +9,10 @@
 #  Entrées : GIT_USER, GIT_TOKEN (credential github-credentials), PLATFORM_REPO,
 #  GITOPS_BRANCH, ENV_NAME, K8S_NAMESPACE, HELM_PROFILE, OWNER, OWNER_SLUG,
 #  FEATURE_SLUG, ECR_REGISTRY, APP_NAME, IMAGE_TAG, APP_HOST, BUILD_NUMBER, GIT_SHORT.
-#  Réglage : GITOPS_PUSH_ATTEMPTS (5). GITOPS_REMOTE_URL remplace l'URL GitHub (tests).
+#  Le chart du commit construit est copié dans envs/<env>/chart : l'ApplicationSet lit chart
+#  et valeurs à la même révision de GITOPS_BRANCH (exigé par Argo CD 2.13).
+#  Réglage : GITOPS_PUSH_ATTEMPTS (5). GITOPS_REMOTE_URL remplace l'URL GitHub, CHART_SRC le
+#  chart (platform/gitops/charts/events-app du workspace), pour les tests.
 # =============================================================================
 set -euo pipefail
 
@@ -18,6 +21,8 @@ REMOTE="${GITOPS_REMOTE_URL:-https://github.com/${PLATFORM_REPO}.git}"
 WORK="$(pwd)/gitops-work"
 OUT="$(pwd)"
 IMAGE="${ECR_REGISTRY}/${APP_NAME}:${IMAGE_TAG}"
+CHART_SRC="${CHART_SRC:-$OUT/platform/gitops/charts/events-app}"
+[[ -f "$CHART_SRC/Chart.yaml" ]] || { echo "Chart introuvable : $CHART_SRC/Chart.yaml" >&2; exit 1; }
 
 rm -rf "$WORK" "$OUT/gitops-revision.txt" "$OUT/gitops-image.txt"
 trap 'rm -rf "$WORK"' EXIT    # le jeton GitHub (config du clone) ne reste pas dans l'espace de travail
@@ -47,7 +52,9 @@ image:
 ingress:
   host: $APP_HOST
 EOF
-  git add -- "$dir"
+  rm -rf "$dir/chart"
+  cp -R "$CHART_SRC" "$dir/chart"
+  git add -A -- "$dir"
 }
 
 pushed=""

@@ -2,6 +2,8 @@
 #  Configuration de l'usine DevOps (EC2 créée par Terraform)
 #  ansible-playbook site.yml --ask-vault-pass
 # =============================================================================
+- import_playbook: preflight.yml
+
 - name: Usine DevOps · Jenkins, Nexus, SonarQube
   hosts: devops
   become: true

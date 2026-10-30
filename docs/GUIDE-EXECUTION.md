@@ -180,7 +180,7 @@ kubectl get nodes
 kubectl -n argocd get applications
 ```
 
-Terraform génère l'inventaire Ansible dans `ansible/inventory/hosts.ini` et les valeurs de relais dans `ansible/group_vars/devops/terraform.yml`. Ces fichiers sont produits localement après `apply`.
+Terraform génère l'inventaire Ansible dans `ansible/inventory/hosts.ini` et les valeurs de relais dans `ansible/group_vars/devops/terraform.yml`. Ces fichiers sont produits localement après `apply` et **ignorés par Git** (seuls les `*.example` sont versionnés) : un `git stash` ou `git checkout` ne peut plus les remettre aux valeurs d'exemple.
 
 ## 4. Découvrir les adresses des load balancers
 
@@ -223,7 +223,7 @@ ansible-vault encrypt ansible/group_vars/devops/vault.yml
 make configure
 ```
 
-Le premier passage configure la stack, change `admin/admin` dans SonarQube, crée le webhook SonarQube interne et le webhook GitHub `push`/`pull_request`. Le rôle SonarQube peut créer un jeton nommé `jenkins`; Ansible l'affiche une seule fois. Copiez immédiatement cette valeur dans `vault_sonar_token` du Vault. SonarQube ne permet pas de relire un jeton existant. Si le jeton a déjà été créé mais n'a pas été sauvegardé, révoquez-le dans SonarQube puis relancez le playbook pour en créer un nouveau.
+Le premier passage configure la stack, change `admin/admin` dans SonarQube, crée le webhook SonarQube interne et le webhook GitHub `push`/`pull_request`. Si `vault_sonar_token` est vide (ou si SonarQube ne connaît plus le jeton `jenkins`), le rôle SonarQube révoque le jeton `jenkins` orphelin, en crée un nouveau, l'écrit directement dans `vault_sonar_token` (via `scripts/vault-set.sh`, sans l'afficher) et recrée Jenkins avec le credential `sonar-token`. Prérequis : `ansible/.vault_pass` présent sur le poste ; sinon le rôle s'arrête **avant** de créer le jeton.
 
 Une fois le compte Jenkins Argo CD prêt, ouvrez un tunnel dans un terminal :
 
@@ -354,25 +354,30 @@ Jenkins tourne en conteneur Docker sur l'EC2 **`fst-events-devops`** (Docker Com
 
 ### Prérequis, à faire une fois
 
-1. **Branche `gitops` publiée et lue par Argo CD.** L'ApplicationSet (`platform/gitops/platform/apps/40-events-environments.yaml`) lit `envs/*/config.json` et la source `ref: values` sur **`gitops`**, la branche où Jenkins pousse. Ne jamais la remplacer par `main` : la révision poussée par Jenkins ne serait jamais appliquée (et pousser sur `main` relancerait un build à chaque promotion).
+1. **Branche `gitops` publiée et lue par Argo CD.** L'ApplicationSet (`platform/gitops/platform/apps/40-events-environments.yaml`) lit `envs/*/config.json`, le chart `envs/<env>/chart` et la source `ref: values` sur **`gitops`**, la branche où Jenkins pousse. Ne jamais la remplacer par `main` : la révision poussée par Jenkins ne serait jamais appliquée (et pousser sur `main` relancerait un build à chaque promotion). Les deux sources doivent rester sur la **même** révision : Argo CD 2.13 refuse une source `$values` qui lit le dépôt du chart à une autre révision (`ComparisonError: cannot reference a different revision of the same repository`). L'étape 12 copie donc le chart du commit construit dans `envs/<env>/chart` ; un environnement sans ce dossier (jamais promu depuis) reste en `ComparisonError` jusqu'à sa prochaine promotion.
 2. **Adresses des load balancers** : `make post-apply` écrit `argocd_server` (NLB interne Argo CD, port 80) et `apps_domain` (`<IP du NLB ingress>.sslip.io`) dans `ansible/group_vars/devops/runtime.yml`, et un commit local des hôtes staging/prod sur `gitops` à publier (`git push origin gitops`).
-3. **Jeton Argo CD du compte `jenkins`** (aucun jeton n'existe tant qu'il n'est pas généré) :
+3. **Jeton Argo CD du compte `jenkins`** (aucun jeton n'existe tant qu'il n'est pas généré). Argo CD sert du **HTTP en clair** (`server.insecure`, NLB interne au VPC, injoignable depuis un poste) : on passe par un port-forward et le CLI exige `--plaintext --grpc-web`.
 
    ```bash
-   make argocd-ui                       # terminal 1 : port-forward localhost:8080
-   argocd login localhost:8080 --username admin --grpc-web --plaintext   # mot de passe : secret argocd-initial-admin-secret
-   argocd account generate-token --account jenkins --server localhost:8080 --grpc-web --plaintext
+   make argocd-ui       # terminal 1 : http://localhost:8080, tunnel relancé s'il est coupé
+   make argocd-login    # terminal 2 : admin, mot de passe saisi masqué, puis get-user-info
+   make argocd-token    # vérifie admin, compte jenkins (apiKey seul), RBAC minimal, génère,
+                        # valide le jeton avec lui-même et l'écrit dans vault_argocd_token
    ```
 
-   Copier la valeur dans `vault_argocd_token` (`ansible-vault edit ansible/group_vars/devops/vault.yml`), sans l'afficher ailleurs.
-4. **Reconfigurer Jenkins** : `make configure`. Vérifier avant que l'inventaire et `group_vars/devops/terraform.yml` contiennent les vraies valeurs (IP de l'EC2, registre ECR, région) et non les valeurs d'exemple (`203.0.113.10`, `000000000000`) : ils sont régénérés par `terraform apply`. Ansible réécrit la configuration JCasC (`ARGOCD_SERVER`, `APPS_DOMAIN`, `GITOPS_BRANCH`) et le credential `argocd-token`.
+   Le jeton n'est jamais affiché ni passé en argument : `scripts/argocd-jenkins-token.sh` le transmet par stdin à `scripts/vault-set.sh`, qui garde une copie chiffrée du Vault précédent dans `ansible/.vault-backups/` (ignoré par Git). Les deux scripts sont testés par `bash scripts/tests/test-secret-tools.sh`.
+
+   **`lost connection to pod` / `connection reset by peer` / `connection refused`** : une connexion TLS est envoyée au port en clair ; le serveur la coupe et `kubectl port-forward` s'arrête entièrement, d'où `connection refused` ensuite. Sources : `https://localhost:8080`, `curl https`, CLI sans `--plaintext`, et **`argocd login` lui-même**, qui sonde le serveur en TLS même avec `--plaintext`. C'est pourquoi `make argocd-login` n'utilise pas `argocd login` : `scripts/argocd-session.sh` attend que le tunnel réponde, ouvre la session par `POST /api/v1/session` en HTTP clair et l'enregistre dans la configuration du CLI (`plain-text` + `grpc-web`, 0600). Tests : `bash scripts/tests/test-argocd-session.sh`.
+
+   **`unable to forward port because pod is not running`** ou nœuds `NotReady` : sur AWS Academy, la fin de session du lab arrête les instances (nœuds EKS, EC2 Jenkins). Relancer le lab (*Start Lab*), attendre les nœuds `Ready` (`kubectl get nodes`) et le pod `argocd-server` `Running`, puis `make argocd-ui`.
+4. **Reconfigurer Jenkins** : `make configure`. Le playbook commence par `ansible/preflight.yml` (local, sans SSH) et s'arrête si l'inventaire ou `group_vars/devops/terraform.yml` contiennent des valeurs d'exemple (`203.0.113.10`, `000000000000`) ou un registre ECR hors de la région, si `argocd_server`/`apps_domain` manquent dans `runtime.yml`, ou si `vault_argocd_token` est vide. Vérification seule : `cd ansible && ansible-playbook preflight.yml --ask-vault-pass`. Ansible réécrit la configuration JCasC (`ARGOCD_SERVER`, `APPS_DOMAIN`, `GITOPS_BRANCH`) et le credential `argocd-token`.
 5. **Credentials Jenkins** (créés par JCasC à partir du Vault) : `github-credentials` (push sur `gitops`), `argocd-token`, `sonar-token`, `nexus-credentials`. AWS/ECR : rôle de l'instance (`LabInstanceProfile` sur AWS Academy), aucune clé stockée.
 
 ### Ce que vérifie le pipeline
 
 - **Étape 1** (`ci/deploy-preflight.sh`, si déploiement) : variables non vides et cohérentes (registre ECR dans la bonne région, `GITOPS_BRANCH` jamais une branche construite, `APPS_DOMAIN` résolvable), outils présents, identité AWS et dépôt ECR, connexion Argo CD avec le jeton (`account get-user-info`), et branche réellement lue par Argo CD. Un prérequis manquant échoue en quelques secondes avec la cause.
 - **Étape 12** (`ci/gitops-promote.sh`) : écrit `envs/<env>/`, pas de commit vide, repousse en régénérant les fichiers si la branche a avancé, vérifie que le SHA enregistré est sur `origin/gitops`; produit `gitops-revision.txt` et `gitops-image.txt`.
-- **Étape 13** (`ci/argocd-wait.sh`) : compare la révision de la **source `values`** (Application multi-source : la source chart suit `main`) au SHA poussé, accepte un commit plus récent seulement si `envs/<env>` n'a pas changé, exige l'image du build dans l'Application, `Synced` et `Healthy`. Réglages : `ARGOCD_WAIT_SECONDS` (600), `ARGOCD_POLL_SECONDS` (10), `ARGOCD_APP_CREATE_SECONDS` (180), `ARGOCD_DEGRADED_GRACE_SECONDS` (90).
+- **Étape 13** (`ci/argocd-wait.sh`) : compare la révision de la **source `values`** (Application multi-source : chart `envs/<env>/chart` et valeurs à la même révision de `gitops`) au SHA poussé, accepte un commit plus récent seulement si `envs/<env>` n'a pas changé, exige l'image du build dans l'Application, `Synced` et `Healthy`. Réglages : `ARGOCD_WAIT_SECONDS` (600), `ARGOCD_POLL_SECONDS` (10), `ARGOCD_APP_CREATE_SECONDS` (180), `ARGOCD_DEGRADED_GRACE_SECONDS` (90).
 - **Étape 14** (`ci/smoke-tests.sh`) : `http://<env>.<APPS_DOMAIN>/events` — readiness `UP`, Prometheus, tableau de bord HTML, API JSON (obligatoire sur staging/prod, 404 toléré sur une feature); code HTTP exact, redirections non suivies.
 
 ### Diagnostic des échecs
@@ -381,6 +386,7 @@ Jenkins tourne en conteneur Docker sur l'EC2 **`fst-events-devops`** (Docker Com
 |---|---|---|
 | `PRÉREQUIS MANQUANT : ARGOCD_SERVER est vide` / `erreur CONFIGURATION … server address unspecified` | `runtime.yml` absent lors de `make configure` | Prérequis 2 puis 4 |
 | `Credential Jenkins « argocd-token » vide` / `erreur AUTHENTIFICATION` | Jeton absent, expiré ou révoqué | Prérequis 3 puis 4 |
+| `lost connection to pod` (port-forward), `unexpected eof while reading`, puis `connection refused` | Client TLS vers Argo CD en HTTP clair (dont la sonde TLS de `argocd login`) | `http://localhost:8080`, `make argocd-login`, CLI avec `--plaintext --grpc-web` (prérequis 3) |
 | `erreur AUTORISATION` | `policy.csv` sans `get`/`sync` pour `jenkins` | `terraform/values/argocd.yaml.tftpl` |
 | `erreur DNS` / `erreur RÉSEAU` | Jenkins hors du VPC ou NLB filtré | Vérifier VPC, groupe de sécurité, `loadBalancerSourceRanges` |
 | `lit les valeurs sur …@main, mais Jenkins pousse sur …@gitops` | ApplicationSet modifié | Remettre `gitops` (prérequis 1) |
@@ -388,7 +394,7 @@ Jenkins tourne en conteneur Docker sur l'EC2 **`fst-events-devops`** (Docker Com
 | `Révision appliquée et saine, mais l'image … n'est pas déployée` | Valeurs non prises en compte par le chart | Comparer `envs/<env>/values.yaml` et le chart |
 | `DNS : le nom de http://… ne se résout pas` (étape 14) | `APPS_DOMAIN` vide ou faux | Prérequis 2 puis 4 |
 
-Tests des scripts, sans cluster ni AWS : `bash ci/tests/test-deploy-preflight.sh`, `bash ci/tests/test-gitops-promote.sh`, `bash ci/tests/test-argocd-wait.sh`.
+Tests des scripts, sans cluster ni AWS : `bash ci/tests/test-deploy-preflight.sh`, `bash ci/tests/test-gitops-promote.sh`, `bash ci/tests/test-argocd-wait.sh`, `bash platform/ansible/tests/test-preflight.sh`.
 
 ## 9. Contrôles locaux sans action AWS
 

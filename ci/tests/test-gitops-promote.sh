@@ -16,13 +16,19 @@ git clone --quiet "$T/remote.git" "$T/seed" 2>/dev/null
   mkdir -p envs/prod && echo "tag: prod-1" > envs/prod/values.yaml && git add -A && git commit --quiet -m init
   git push --quiet origin gitops )
 
+# Chart du build (copié dans envs/<env>/chart par la promotion)
+mkdir -p "$T/chart/templates"
+printf 'apiVersion: v2\nname: events-app\nversion: 1.0.0\n' > "$T/chart/Chart.yaml"
+echo "kind: Deployment" > "$T/chart/templates/deployment.yaml"
+echo "obsolete" > "$T/chart/templates/obsolete.yaml"
+
 promote() {   # promote <tag> -> exécute le script dans $T/job
   rm -rf "$T/job"; mkdir -p "$T/job"
   (cd "$T/job" && GITOPS_REMOTE_URL="file://$T/remote.git" PLATFORM_REPO=o/r GITOPS_BRANCH=gitops \
      ENV_NAME=staging K8S_NAMESPACE=events-staging HELM_PROFILE=staging OWNER="Equipe" OWNER_SLUG=equipe \
      FEATURE_SLUG=staging ECR_REGISTRY=315488743028.dkr.ecr.us-east-1.amazonaws.com APP_NAME=events-app \
      IMAGE_TAG="$1" APP_HOST=staging.1.2.3.4.sslip.io BUILD_NUMBER=8 GIT_SHORT=abc1234 \
-     GITOPS_PUSH_ATTEMPTS="${ATTEMPTS:-5}" bash "$CI/gitops-promote.sh" 2>&1)
+     GITOPS_PUSH_ATTEMPTS="${ATTEMPTS:-5}" CHART_SRC="${CHART_SRC:-$T/chart}" bash "$CI/gitops-promote.sh" 2>&1)
 }
 remote_head() { git --git-dir="$T/remote.git" rev-parse refs/heads/gitops; }
 
@@ -36,6 +42,18 @@ if (( rc == 0 )) && [[ "$(cat "$T/job/gitops-revision.txt")" == "$(remote_head)"
    && [[ ! -d "$T/job/gitops-work" ]]; then
   ok "promotion : commit poussé, révision et image enregistrées, prod intacte, clone supprimé"
 else ko "promotion" "$out"; fi
+
+# 1b. Chart du build copié dans envs/staging/chart ; un fichier retiré du chart disparaît
+if git --git-dir="$T/remote.git" show gitops:envs/staging/chart/Chart.yaml | grep -q 'name: events-app'; then
+  ok "promotion : chart du build copié dans envs/staging/chart"; else ko "chart non copié"; fi
+rm "$T/chart/templates/obsolete.yaml"
+out="$(promote staging-8-abc1234)"
+if ! git --git-dir="$T/remote.git" cat-file -e gitops:envs/staging/chart/templates/obsolete.yaml 2>/dev/null \
+   && ! git --git-dir="$T/remote.git" cat-file -e gitops:envs/prod/chart 2>/dev/null; then
+  ok "promotion : chart remplacé (fichier supprimé retiré), autres environnements intacts"
+else ko "remplacement du chart" "$out"; fi
+out="$(CHART_SRC="$T/absent" promote staging-8-abc1234)"; rc=$?
+(( rc != 0 )) && grep -q "Chart introuvable" <<<"$out" && ok "chart absent : échec explicite" || ko "chart absent" "$out"
 
 # 2. Même état : aucun commit vide, révision = tête distante
 before="$(remote_head)"; out="$(promote staging-8-abc1234)"; rc=$?

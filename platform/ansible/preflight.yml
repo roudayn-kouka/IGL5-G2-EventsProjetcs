@@ -1,0 +1,42 @@
+# =============================================================================
+#  Contrôles préalables de site.yml (importé en tête) : exécutés sur le contrôleur,
+#  sans connexion SSH. Testés par tests/test-preflight.sh.
+# =============================================================================
+# Contrôles locaux (aucune connexion) : un JCasC avec des valeurs d'exemple ou vides
+# casse le pipeline à l'étape 1 (deploy-preflight.sh) de chaque build déployé.
+- name: Contrôles préalables · valeurs Terraform, runtime et jeton Argo CD
+  hosts: devops
+  gather_facts: false
+  tags: [always]
+  tasks:
+    - name: Valeurs Terraform réelles (pas celles des fichiers .example)
+      ansible.builtin.assert:
+        that:
+          - ansible_host is not search('^(192\.0\.2|198\.51\.100|203\.0\.113)\.')
+          - devops_public_ip is not search('^(192\.0\.2|198\.51\.100|203\.0\.113)\.')
+          - ecr_registry is match('^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com$')
+          - not (ecr_registry is match('^000000000000\.'))
+          - ecr_registry is search('\.dkr\.ecr\.' ~ aws_region ~ '\.')
+          - ansible_host == devops_public_ip
+        fail_msg: >-
+          inventory/hosts.ini ou group_vars/devops/terraform.yml contient des valeurs d'exemple
+          ou incohérentes (hôte {{ ansible_host }}, registre {{ ecr_registry }}, région {{ aws_region }}).
+          Ils sont générés par Terraform (local_file) : les régénérer depuis l'état réel.
+
+    - name: Points d'accès écrits par « make post-apply » (runtime.yml)
+      ansible.builtin.assert:
+        that:
+          - (argocd_server | default('')) is match('^[A-Za-z0-9.-]+(:[0-9]+)?$')
+          - (apps_domain | default('')) is match('^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
+          - not ((apps_domain | default('')) is search('\.local$'))
+        fail_msg: >-
+          argocd_server ou apps_domain absent de group_vars/devops/runtime.yml :
+          lancer « make post-apply » (contexte kubectl du cluster) avant « make configure ».
+
+    - name: Jeton Argo CD du compte jenkins (credential argocd-token)
+      ansible.builtin.assert:
+        that: (argocd_token | default('') | length) > 0
+        fail_msg: >-
+          vault_argocd_token est vide : générer le jeton (make argocd-token) et l'ajouter
+          avec « ansible-vault edit group_vars/devops/vault.yml ».
+        quiet: true
