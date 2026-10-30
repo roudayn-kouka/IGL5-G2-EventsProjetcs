@@ -4,6 +4,6 @@
   "owner": "farah-baraket",
   "feature": "participant",
   "imageRepository": "093574962208.dkr.ecr.us-east-1.amazonaws.com/events-app",
-  "imageTag": "participant-36-374b91b",
+  "imageTag": "participant-39-3a24af1",
   "host": "participant.events.local"
 }
