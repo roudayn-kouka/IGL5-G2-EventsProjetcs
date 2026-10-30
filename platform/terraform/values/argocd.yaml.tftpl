@@ -7,9 +7,10 @@ configs:
     accounts.jenkins: apiKey
   rbac:
     policy.default: ""
-    policy.csv: |
+      policy.csv: |
       p, role:jenkins, applications, get, events/*, allow
       p, role:jenkins, applications, sync, events/*, allow
+      p, role:jenkins, projects, get, events, allow
       g, jenkins, role:jenkins
 %{ if github_token != "" ~}
   credentialTemplates:

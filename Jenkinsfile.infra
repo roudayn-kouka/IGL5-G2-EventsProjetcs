@@ -43,6 +43,9 @@ def withTf(Closure body) {
 def notify(String color, String text) {
   try { slackSend(channel: '#igl5-g2-ci', color: color, message: "Farah Baraket : "+text) }
   catch (e) { echo "Slack non configuré : ${text}" }
+  // E-mail (SMTP configuré dans Manage Jenkins > System > E-mail Notification)
+  try { mail to: 'fbaraket48@gmail.com', subject: "[Events INFRA] ${text}", body: "${text}\n" }
+  catch (e) { echo "E-mail non envoyé : ${e.message}" }
 }
 
 pipeline {

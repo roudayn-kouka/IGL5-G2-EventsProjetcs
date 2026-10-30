@@ -49,6 +49,10 @@ pipeline {
         ZAP_IMAGE          = 'ghcr.io/zaproxy/zaproxy:stable'
         SONAR_PLUGIN       = 'org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922'
         MVN                = 'sh ./mvnw -B -ntp'             // wrapper du dépôt : pas besoin de Maven dans Jenkins
+        MAIL_TO            = 'fbaraket48@gmail.com'          // destinataire des e-mails de build (en plus de Slack)
+        // Vide = smoke tests et ZAP passent par le load balancer (curl --resolve).
+        // Sinon URL de base, ex. http://host.docker.internal:8083/events (un port-forward lancé sur ton PC) : sans --resolve.
+        SMOKE_BASE_URL     = ''
     }
 
     stages {
@@ -225,6 +229,22 @@ pipeline {
                             --label tn.fst.owner=$OWNER_SLUG \
                             -t $IMAGE .
                         '''
+                        // Publication aussi sur Docker Hub : <utilisateur>/events-app:<tag> et :latest
+                        // Credential Jenkins « dockerhub-credentials » (Username + access token Docker Hub)
+                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials',
+                                                          usernameVariable: 'DH_USER', passwordVariable: 'DH_TOKEN')]) {
+                            sh '''
+                              set +x
+                              HUB_IMAGE="$DH_USER/$APP_NAME"
+                              echo "$DH_TOKEN" | docker login --username "$DH_USER" --password-stdin
+                              docker tag "$IMAGE" "$HUB_IMAGE:$IMAGE_TAG"
+                              docker tag "$IMAGE" "$HUB_IMAGE:latest"
+                              docker push "$HUB_IMAGE:$IMAGE_TAG"
+                              docker push "$HUB_IMAGE:latest"
+                              docker logout
+                              echo "Docker Hub : $HUB_IMAGE:$IMAGE_TAG"
+                            '''
+                        }
                     }
                 }
 
@@ -380,8 +400,11 @@ ingress:
                         stage('Smoke tests') {
                             steps {
                                 sh '''
-                                  BASE="http://$APP_HOST/events"
-                                  C="curl --resolve $APP_HOST:80:$LB_IP"
+                                  if [ -n "$SMOKE_BASE_URL" ]; then
+                                    BASE="$SMOKE_BASE_URL"; C="curl"
+                                  else
+                                    BASE="http://$APP_HOST/events"; C="curl --resolve $APP_HOST:80:$LB_IP"
+                                  fi
                                   HEALTH=$($C -fsS --retry 10 --retry-delay 6 --retry-all-errors "$BASE/actuator/health/readiness")
                                   echo "$HEALTH"
                                   echo "$HEALTH" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"' || {
@@ -404,7 +427,13 @@ ingress:
                         stage('DAST · OWASP ZAP') {
                             steps {
                                 // rapport seulement (|| true) : ZAP ne bloque jamais sur une feature
-                                sh 'docker run --rm --add-host "$APP_HOST:$LB_IP" $ZAP_IMAGE zap-baseline.py -t "http://$APP_HOST/events/" -I -m 2 || true'
+                                sh '''
+                                  if [ -n "$SMOKE_BASE_URL" ]; then
+                                    docker run --rm $ZAP_IMAGE zap-baseline.py -t "$SMOKE_BASE_URL/" -I -m 2 || true
+                                  else
+                                    docker run --rm --add-host "$APP_HOST:$LB_IP" $ZAP_IMAGE zap-baseline.py -t "http://$APP_HOST/events/" -I -m 2 || true
+                                  fi
+                                '''
                             }
                         }
                     }
@@ -481,6 +510,14 @@ def notifyTeam(String status, String color) {
     try {
         slackSend(channel: '#igl5-g2-ci', color: color, message: msg)
     } catch (Exception ignored) {
-        echo "Notification : ${msg}"
+        echo "Slack non configuré : ${msg}"
+    }
+    // E-mail (SMTP configuré dans Manage Jenkins > System > E-mail Notification)
+    try {
+        mail to: env.MAIL_TO,
+             subject: "[Events CI] ${status} · ${env.FEATURE_SLUG} #${env.BUILD_NUMBER}",
+             body: "Statut : ${status}\nBranche : ${env.BRANCH_NAME}\nResponsable : ${env.OWNER}\nCommit : ${env.GIT_SHORT}\nImage : ${env.IMAGE_TAG}\nBuild : ${env.BUILD_URL}\n"
+    } catch (Exception e) {
+        echo "E-mail non envoyé : ${e.message}"
     }
 }
