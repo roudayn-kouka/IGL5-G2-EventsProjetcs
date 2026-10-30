@@ -1,8 +1,8 @@
-# Généré par Jenkins — build #23 — commit 87455a6 — ne pas modifier à la main
+# Généré par Jenkins — build #25 — commit f495ac1 — ne pas modifier à la main
 feature: feedback
 owner: emna-ouarteni
 image:
   repository: 471112616916.dkr.ecr.us-east-1.amazonaws.com/events-app
-  tag: feedback-23-87455a6
+  tag: feedback-25-f495ac1
 ingress:
   host: feedback.44.218.144.91.sslip.io
