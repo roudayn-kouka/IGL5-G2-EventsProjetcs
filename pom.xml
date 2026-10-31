@@ -26,29 +26,37 @@
             - Byte Buddy (utilisé par Mockito et Hibernate) doit connaître la version du JDK
             - SnakeYAML 2.x corrige CVE-2022-1471 (critique, 1.30 par défaut dans Boot 2.7)
             - Tomcat 9.0.121 corrige 7 CVE critiques de la 9.0.83 fournie par Boot 2.7.18
+            - Log4j2 : version plus récente que la 2.17.2 par défaut de Boot 2.7.18
         -->
         <lombok.version>1.18.46</lombok.version>
         <byte-buddy.version>1.17.7</byte-buddy.version>
         <jacoco.version>0.8.15</jacoco.version>
         <snakeyaml.version>2.2</snakeyaml.version>
         <tomcat.version>9.0.121</tomcat.version>
+        <log4j2.version>2.24.3</log4j2.version>
     </properties>
     <dependencies>
-        <!-- Logging : Log4j2 à la place de Logback -->
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter</artifactId>
-    <exclusions>
-        <exclusion>
+        <!-- Logging : Log4j2 à la place de Logback.
+             L'exclusion sur spring-boot-starter s'applique à tous les starters. -->
+        <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-logging</artifactId>
-        </exclusion>
-    </exclusions>
-</dependency>
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-log4j2</artifactId>
-</dependency>
+            <artifactId>spring-boot-starter</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-logging</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-log4j2</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
@@ -57,6 +65,7 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+
         <!-- Observabilité : /actuator/health (probes Kubernetes) et /actuator/prometheus -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
