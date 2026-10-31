@@ -346,7 +346,7 @@ appset_only_env    = "${env.APPSET_ENV}"
                             env.HELM_PROFILE  = profileFor(env.BRANCH_TYPE)
                             env.DEPLOY        = (env.BRANCH_TYPE == 'pr') ? 'false' : 'true'
                             env.SECURITY_GATE = (env.BRANCH_TYPE in ['main', 'release']) ? 'strict' : 'report'
-                            env.APP_VERSION   = (env.BRANCH_TYPE == 'main') ? "1.0.${env.BUILD_NUMBER}" : "1.0.0-${env.FEATURE_SLUG}-SNAPSHOT"
+                            env.APP_VERSION   = (env.BRANCH_TYPE == 'feature/logistics') ? "1.0.${env.BUILD_NUMBER}" : "1.0.0-${env.FEATURE_SLUG}-SNAPSHOT"
                             if (env.DEPLOY == 'true' && !env.ECR_REGISTRY) {
                                 error "Variable globale ECR_REGISTRY non définie (Manage Jenkins > System > Global properties)"
                             }
@@ -452,23 +452,30 @@ appset_only_env    = "${env.APPSET_ENV}"
                 }
 
                 // -------------------------------------------------------- 7
-                stage('Publication JAR - Nexus') {
-                    when { expression { env.DEPLOY == 'true' } }
+             stage('Publication JAR · Nexus') {
                     steps {
-                        script {
-                            def repo = env.APP_VERSION.endsWith('-SNAPSHOT') ? 'maven-snapshots' : 'maven-releases'
-                            withCredentials([usernamePassword(credentialsId: 'nexus-credentials',
-                                                              usernameVariable: 'NEXUS_USR', passwordVariable: 'NEXUS_PSW')]) {
-                                sh """
-                                  ${MVN} -s ci/maven-settings.xml deploy -DskipTests \
-                                    -DaltDeploymentRepository=nexus::default::${env.NEXUS_URL}/repository/${repo}/
-                                """
-                            }
+                        withCredentials([usernamePassword(credentialsId: 'nexus-credentials',
+                                                          usernameVariable: 'NEXUS_USR', passwordVariable: 'NEXUS_PSW')]) {
+                            // 1. SNAPSHOT : version de travail de la branche
+                            sh """
+                              ${MVN} -s ci/maven-settings.xml deploy -DskipTests -Dskip.npm -Dskip.installnodenpm \
+                                -DaltDeploymentRepository=nexus::default::${env.NEXUS_URL}/repository/maven-snapshots/
+                            """
+                            // 2. RELEASE :
+                            sh '''
+                              JAR=$(find target -maxdepth 1 -type f -name '.jar' ! -name '.jar.original' | head -n1)
+                              REL="1.0.0-$FEATURE_SLUG.$BUILD_NUMBER"
+                              sh ./mvnw -B -ntp -s ci/maven-settings.xml deploy:deploy-file \
+                                -Dfile="$JAR" -DgroupId=tn.fst -DartifactId=eventsProject -Dversion="$REL" \
+                                -Dpackaging=jar -DgeneratePom=true -DrepositoryId=nexus \
+                                -Durl="$NEXUS_URL/repository/maven-releases/"
+                              echo "Release publiée : tn.fst:eventsProject:$REL"
+                            '''
                         }
                     }
                 }
 
-                // -------------------------------------------------------- 8
+----------------------------------------------- 8
                 stage('Image Docker') {
                     when { expression { env.DEPLOY == 'true' } }
                     steps {
