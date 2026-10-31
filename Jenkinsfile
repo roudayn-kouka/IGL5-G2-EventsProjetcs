@@ -77,6 +77,7 @@ pipeline {
                     env.DEPLOY        = (env.BRANCH_TYPE == 'pr') ? 'false' : 'true'
                     env.SECURITY_GATE = (env.BRANCH_TYPE in ['main', 'release']) ? 'strict' : 'report'
                     env.APP_VERSION   = (env.BRANCH_TYPE == 'feature/event') ? "1.0.${env.BUILD_NUMBER}" : "1.0.0-${env.FEATURE_SLUG}-SNAPSHOT"
+                    env.APP_VERSION = "1.0.${env.BUILD_NUMBER}"
                     env.IMAGE_TAG     = "${env.FEATURE_SLUG}-${env.BUILD_NUMBER}-${env.GIT_SHORT}"
                     env.IMAGE         = "${env.ECR_REGISTRY ?: 'registry.local'}/${env.APP_NAME}:${env.IMAGE_TAG}"
                     env.SONAR_KEY     = "fst-events-${env.FEATURE_SLUG}"
