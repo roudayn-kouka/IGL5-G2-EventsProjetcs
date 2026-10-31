@@ -463,7 +463,7 @@ appset_only_env    = "${env.APPSET_ENV}"
                             """
                             // 2. RELEASE :
                             sh '''
-                              JAR=$(find target -maxdepth 1 -type f -name '.jar' ! -name '.jar.original' | head -n1)
+                              JAR=$(find target -maxdepth 1 -type f -name '*.jar' ! -name '*.jar.original' | head -n1)
                               REL="1.0.0-$FEATURE_SLUG.$BUILD_NUMBER"
                               sh ./mvnw -B -ntp -s ci/maven-settings.xml deploy:deploy-file \
                                 -Dfile="$JAR" -DgroupId=tn.fst -DartifactId=eventsProject -Dversion="$REL" \
@@ -475,7 +475,7 @@ appset_only_env    = "${env.APPSET_ENV}"
                     }
                 }
 
------------------------------------------------ 
+            //----------------------------------------------- 
                 stage('Image Docker') {
                     when { expression { env.DEPLOY == 'true' } }
                     steps {
