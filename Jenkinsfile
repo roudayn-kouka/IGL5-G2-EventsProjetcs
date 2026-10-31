@@ -503,7 +503,7 @@ appset_only_env    = "${env.APPSET_ENV}"
                               touch .trivyignore
                               CID=\$(docker create -e TRIVY_DB_REPOSITORY -e TRIVY_JAVA_DB_REPOSITORY \\
                                       -v /var/run/docker.sock:/var/run/docker.sock -v trivy-cache:/root/.cache \\
-                                      ${TRIVY_IMAGE} image --severity CRITICAL --ignore-unfixed --exit-code ${exitCode} \\
+                                     ${TRIVY_IMAGE} image --timeout 20m --severity CRITICAL --ignore-unfixed --exit-code ${exitCode} \\
                                       --ignorefile /trivyignore --format table --output /trivy-image.txt ${IMAGE})
                               docker cp .trivyignore "\$CID:/trivyignore"
                               set +e
