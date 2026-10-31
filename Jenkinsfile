@@ -475,7 +475,7 @@ appset_only_env    = "${env.APPSET_ENV}"
                     }
                 }
 
------------------------------------------------ 8
+----------------------------------------------- 
                 stage('Image Docker') {
                     when { expression { env.DEPLOY == 'true' } }
                     steps {
