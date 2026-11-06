@@ -1,8 +1,8 @@
-# Mis à jour par Jenkins après APPROBATION manuelle d'un build de main
+# Généré par Jenkins — build #1 — commit 6879ca2 — ne pas modifier à la main
 feature: prod
 owner: equipe-igl5-g2
 image:
   repository: 315488743028.dkr.ecr.us-east-1.amazonaws.com/events-app
-  tag: staging-6-0de6685
+  tag: prod-1-6879ca2
 ingress:
-  host: "prod.34.237.163.106.sslip.io"
+  host: prod.34.237.163.106.sslip.io

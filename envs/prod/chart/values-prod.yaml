@@ -1,0 +1,16 @@
+# Production (main) : haute disponibilité, autoscaling, données persistantes, pas de données de démo
+replicaCount: 2
+app:
+  demoData: false
+resources:
+  requests: { cpu: 250m, memory: 512Mi }
+  limits:   { cpu: "1",  memory: 1Gi }
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+mysql:
+  persistence:
+    enabled: true
+    size: 10Gi

@@ -1,0 +1,17 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+# Découvert automatiquement par Prometheus (kube-prometheus-stack) : une cible par feature
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: events-app
+  labels:
+    {{- include "events.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "events.appSelector" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: {{ .Values.app.contextPath }}/actuator/prometheus
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+{{- end }}
