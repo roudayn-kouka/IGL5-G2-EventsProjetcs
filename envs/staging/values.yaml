@@ -5,4 +5,4 @@ image:
   repository: 315488743028.dkr.ecr.us-east-1.amazonaws.com/events-app
   tag: staging-14-78f29b8
 ingress:
-  host: staging.32.196.158.224.sslip.io
+  host: "staging.34.237.163.106.sslip.io"
