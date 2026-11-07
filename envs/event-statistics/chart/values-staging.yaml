@@ -1,0 +1,8 @@
+# Staging (develop / release / hotfix) : intégration de toutes les features
+replicaCount: 1
+app:
+  demoData: true
+mysql:
+  persistence:
+    enabled: true
+    size: 5Gi
