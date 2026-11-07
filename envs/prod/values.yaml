@@ -1,8 +1,8 @@
-# Généré par Jenkins — build #1 — commit 6879ca2 — ne pas modifier à la main
+# Généré par Jenkins — build #2 — commit a9d4dd1 — ne pas modifier à la main
 feature: prod
 owner: equipe-igl5-g2
 image:
   repository: 315488743028.dkr.ecr.us-east-1.amazonaws.com/events-app
-  tag: prod-1-6879ca2
+  tag: prod-2-a9d4dd1
 ingress:
   host: prod.34.237.163.106.sslip.io
