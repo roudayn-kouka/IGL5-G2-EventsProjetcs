@@ -1,8 +1,8 @@
-# Généré par Jenkins — build #1 — commit 78f29b8 — ne pas modifier à la main
+# Généré par Jenkins — build #2 — commit 134841e — ne pas modifier à la main
 feature: staging
 owner: equipe-igl5-g2
 image:
   repository: 315488743028.dkr.ecr.us-east-1.amazonaws.com/events-app
-  tag: staging-1-78f29b8
+  tag: staging-2-134841e
 ingress:
   host: staging.34.237.163.106.sslip.io
