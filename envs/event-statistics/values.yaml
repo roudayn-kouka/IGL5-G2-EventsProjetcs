@@ -1,8 +1,8 @@
-# Généré par Jenkins — build #5 — commit b570e11 — ne pas modifier à la main
+# Généré par Jenkins — build #6 — commit a9d4dd1 — ne pas modifier à la main
 feature: event-statistics
 owner: roudayna-kouka
 image:
   repository: 315488743028.dkr.ecr.us-east-1.amazonaws.com/events-app
-  tag: event-statistics-5-b570e11
+  tag: event-statistics-6-a9d4dd1
 ingress:
   host: event-statistics.34.237.163.106.sslip.io
