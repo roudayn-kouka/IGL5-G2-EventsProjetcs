@@ -1,0 +1,13 @@
+﻿server:
+  port: 8888
+
+spring:
+  application:
+    name: config-server
+  profiles:
+    active: native
+  cloud:
+    config:
+      server:
+        native:
+          search-locations: file:///C:/Users/ahlem12/IGL5-G2-EventsProjetcs/microservices/config-repo

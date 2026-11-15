@@ -1,0 +1,4 @@
+﻿server:
+  port: 8081
+
+greeting: "Config chargée depuis le Config Server"
