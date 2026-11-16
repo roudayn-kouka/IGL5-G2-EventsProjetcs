@@ -95,7 +95,11 @@
 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
 <version>3.0.0</version>
 </dependency>
-</dependencies>
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
+		</dependency>
+	</dependencies>
 	<dependencyManagement>
 		<dependencies>
 			<dependency>
