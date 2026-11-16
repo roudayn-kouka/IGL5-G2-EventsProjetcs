@@ -1,4 +1,4 @@
-﻿server:
+server:
   port: 8083
 
 eureka:
@@ -9,6 +9,8 @@ eureka:
 spring:
   cloud:
     openfeign:
+      circuitbreaker:
+        enabled: true
       client:
         config:
           default:
@@ -16,6 +18,9 @@ spring:
             read-timeout: 5000
 
 management:
+  metrics:
+    tags:
+      application: ${spring.application.name}
   endpoints:
     web:
       exposure:
@@ -48,6 +53,8 @@ resilience4j:
         wait-duration-in-open-state: 10s
         permitted-number-of-calls-in-half-open-state: 3
         register-health-indicator: true
+        ignore-exceptions:
+          - io.github.resilience4j.ratelimiter.RequestNotPermitted
   timelimiter:
     instances:
       logisticsService:

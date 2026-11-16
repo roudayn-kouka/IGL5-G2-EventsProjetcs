@@ -1,4 +1,4 @@
-﻿server:
+server:
   port: 8081
 
 eureka:
@@ -19,6 +19,9 @@ spring:
     show-sql: true
 
 management:
+  metrics:
+    tags:
+      application: ${spring.application.name}
   endpoints:
     web:
       exposure:
