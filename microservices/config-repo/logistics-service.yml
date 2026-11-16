@@ -11,6 +11,8 @@ spring:
     url: jdbc:mysql://localhost:3307/logistics_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
     username: root
     password: root
+    hikari:
+      connection-timeout: 2000
   jpa:
     hibernate:
       ddl-auto: update

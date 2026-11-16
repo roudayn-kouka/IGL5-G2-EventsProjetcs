@@ -13,4 +13,10 @@ public interface LogisticsFeignClient {
 
     @GetMapping("/logistics/{id}/cout")
     float getCout(@PathVariable("id") Integer id);
+
+    @GetMapping("/faults/slow")
+    LogisticsDTO slow();
+
+    @GetMapping("/faults/corrupted")
+    LogisticsDTO corrupted();
 }
