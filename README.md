@@ -2,56 +2,115 @@
   <img src="src/main/resources/static/img/logo-fst.jpg" alt="Faculté des Sciences de Tunis" height="110">
 </p>
 
-<h1 align="center">Events Project — Gestion des événements</h1>
+<h1 align="center">🎓 Events Project — Gestion des événements</h1>
 
 <p align="center">
-  Application Spring Boot de gestion des événements, des participants et de la logistique<br>
+  Application Spring Boot de gestion des <b>événements</b>, des <b>participants</b> et de la <b>logistique</b>,<br>
+  livrée par un pipeline <b>CI/CD · DevSecOps · GitOps</b> jusqu'à <b>Amazon EKS</b><br><br>
   <b>Faculté des Sciences de Tunis</b> · Université de Tunis El Manar · IGL5 — Groupe 2
 </p>
 
 <p align="center">
-  <img alt="Java" src="https://img.shields.io/badge/Java-8%2B-000098">
-  <img alt="Spring Boot" src="https://img.shields.io/badge/Spring%20Boot-2.7.18-6DB33F">
-  <img alt="MySQL" src="https://img.shields.io/badge/MySQL-8-4479A1">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-JUnit%20%2B%20Mockito-ccce01">
-  <img alt="Coverage" src="https://img.shields.io/badge/coverage-JaCoCo-000098">
+  <img alt="Java" src="https://img.shields.io/badge/Java-8%2B-000098?style=flat-square&logo=openjdk&logoColor=white">
+  <img alt="Spring Boot" src="https://img.shields.io/badge/Spring%20Boot-2.7.18-6DB33F?style=flat-square&logo=springboot&logoColor=white">
+  <img alt="MySQL" src="https://img.shields.io/badge/MySQL-8-4479A1?style=flat-square&logo=mysql&logoColor=white">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-73%20%C2%B7%20JUnit%20%2B%20Mockito-ccce01?style=flat-square">
+  <img alt="Coverage" src="https://img.shields.io/badge/coverage-JaCoCo-000098?style=flat-square">
+  <img alt="Chart.js" src="https://img.shields.io/badge/Chart.js-4.4.1-FF6384?style=flat-square&logo=chartdotjs&logoColor=white">
+</p>
+
+<p align="center">
+  <img alt="Jenkins" src="https://img.shields.io/badge/Jenkins-Multibranch-D24939?style=flat-square&logo=jenkins&logoColor=white">
+  <img alt="SonarQube" src="https://img.shields.io/badge/SonarQube-Quality%20Gate-4E9BCD?style=flat-square&logo=sonarqube&logoColor=white">
+  <img alt="Gitleaks" src="https://img.shields.io/badge/Gitleaks-secrets-DC3545?style=flat-square">
+  <img alt="Trivy" src="https://img.shields.io/badge/Trivy-FS%20%2B%20image-1904DA?style=flat-square&logo=trivy&logoColor=white">
+  <img alt="OWASP ZAP" src="https://img.shields.io/badge/OWASP%20ZAP-DAST-00549E?style=flat-square&logo=owasp&logoColor=white">
+  <img alt="Nexus" src="https://img.shields.io/badge/Nexus-Maven-1B1C30?style=flat-square&logo=sonatype&logoColor=white">
+</p>
+
+<p align="center">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-JRE%2017%20Alpine-2496ED?style=flat-square&logo=docker&logoColor=white">
+  <img alt="Amazon ECR" src="https://img.shields.io/badge/Amazon-ECR-FF9900?style=flat-square&logo=amazonwebservices&logoColor=white">
+  <img alt="Argo CD" src="https://img.shields.io/badge/Argo%20CD-GitOps-EF7B4D?style=flat-square&logo=argo&logoColor=white">
+  <img alt="Helm" src="https://img.shields.io/badge/Helm-chart-0F1689?style=flat-square&logo=helm&logoColor=white">
+  <img alt="EKS" src="https://img.shields.io/badge/Kubernetes-EKS-326CE5?style=flat-square&logo=kubernetes&logoColor=white">
+  <img alt="Terraform" src="https://img.shields.io/badge/Terraform-IaC-7B42BC?style=flat-square&logo=terraform&logoColor=white">
+  <img alt="Ansible" src="https://img.shields.io/badge/Ansible-config-EE0000?style=flat-square&logo=ansible&logoColor=white">
+  <img alt="Prometheus" src="https://img.shields.io/badge/Prometheus-alertes-E6522C?style=flat-square&logo=prometheus&logoColor=white">
+  <img alt="Grafana" src="https://img.shields.io/badge/Grafana-dashboard-F46800?style=flat-square&logo=grafana&logoColor=white">
+  <img alt="Slack" src="https://img.shields.io/badge/Slack-%23igl5--g2--ci-4A154B?style=flat-square&logo=slack&logoColor=white">
+</p>
+
+<p align="center">
+  <img src="docs/1793905231734.gif" alt="Architecture DevOps GitOps : GitHub déclenche Jenkins, Jenkins publie l'image dans Amazon ECR et le commit GitOps, Argo CD déploie sur EKS, Prometheus, Alertmanager et Grafana supervisent" width="950">
+</p>
+
+<p align="center">
+  <b>push</b> → <b>Jenkins</b> → <b>Amazon ECR</b> → <b>branche <code>gitops</code></b> → <b>Argo CD</b> → <b>EKS</b> → <b>supervision</b>
 </p>
 
 ---
 
-## Sommaire
+## 📑 Sommaire
 
-- [Présentation](#présentation)
-- [Dashboard](#dashboard)
-- [Stack technique](#stack-technique)
-- [Architecture](#architecture)
-- [Modèle de données](#modèle-de-données)
-- [Démarrage rapide](#démarrage-rapide)
-- [API REST](#api-rest)
-- [Tests et couverture](#tests-et-couverture)
-- [Pipeline CI/CD · DevSecOps · GitOps](#pipeline-cicd--devsecops--gitops)
-- [Sécurité](#sécurité)
-- [Structure du projet](#structure-du-projet)
-- [Workflow Git](#workflow-git)
-- [Dépannage](#dépannage)
+- [✨ En bref](#-en-bref)
+- [📖 Présentation](#-présentation)
+- [📊 Dashboard](#-dashboard)
+- [🧰 Stack technique](#-stack-technique)
+- [🏗️ Architecture applicative](#️-architecture-applicative)
+- [🗃️ Modèle de données](#️-modèle-de-données)
+- [🚀 Démarrage rapide](#-démarrage-rapide)
+- [🔌 API REST](#-api-rest)
+- [🧪 Tests et couverture](#-tests-et-couverture)
+- [🔁 Pipeline CI/CD · DevSecOps · GitOps](#-pipeline-cicd--devsecops--gitops)
+- [🔐 Sécurité](#-sécurité)
+- [📁 Structure du projet](#-structure-du-projet)
+- [🌿 Workflow Git](#-workflow-git)
+- [🛠️ Dépannage](#️-dépannage)
 
 ---
 
-## Présentation
+## ✨ En bref
+
+<table>
+<tr>
+<td align="center"><b>17</b><br>étapes de pipeline</td>
+<td align="center"><b>73</b><br>tests automatisés</td>
+<td align="center"><b>5</b><br>contrôles de sécurité</td>
+<td align="center"><b>1 env.</b><br>Kubernetes par feature</td>
+<td align="center"><b>0</b><br>code retour Trivy strict</td>
+</tr>
+</table>
+
+| | |
+|---|---|
+| 🧩 **Application** | Événements, participants, logistique et statistiques, avec un dashboard web aux couleurs de la FST |
+| 🧪 **Tests en double** | Chaque fonctionnalité testée **avec Mockito** (unitaire) et **sans Mockito** (intégration Spring + H2) |
+| 🔐 **DevSecOps** | Gitleaks, Trivy FS, SonarQube + Quality Gate, Trivy image, OWASP ZAP |
+| 🔁 **GitOps** | Jenkins ne déploie jamais directement : il écrit l'état dans la branche orpheline `gitops`, Argo CD synchronise EKS |
+| 🌱 **Environnements éphémères** | Chaque `feature/*` obtient son propre namespace `events-<feature>` |
+| 🏗️ **Infrastructure as Code** | Terraform (VPC, EKS, ECR, EC2 outillage, Argo CD) et Ansible (Jenkins JCasC, Nexus, SonarQube, webhooks) |
+| 📈 **Supervision** | Prometheus, Alertmanager et Grafana, alertes et notifications Slack |
+
+---
+
+## 📖 Présentation
 
 **Events Project** permet d'organiser les événements de la faculté (journées portes ouvertes, hackathons, conférences, forums…) :
 
-- **Événements** : création, dates de début et de fin, coût calculé automatiquement.
-- **Participants** : gestion CRUD et affectation d'une tâche (`ORGANISATEUR`, `ANIMATEUR`, `SERVEUR`, `INVITE`).
-- **Logistique** : matériel et services rattachés à un événement (prix unitaire, quantité, réservé ou non).
-- **Statistiques** : par événement et globales (participants par tâche, taux de réservation, coût de la logistique réservée).
-- **Dashboard web** aux couleurs de la FST, servi directement par l'application.
-- **Tâche planifiée** (`@Scheduled`) qui recalcule régulièrement le coût des événements.
-- **Aspect AOP** (`PerformanceAspect`) qui journalise le temps d'exécution de chaque méthode des services.
+- 📅 **Événements** : création, dates de début et de fin, coût calculé automatiquement.
+- 👥 **Participants** : gestion CRUD et affectation d'une tâche (`ORGANISATEUR`, `ANIMATEUR`, `SERVEUR`, `INVITE`).
+- 📦 **Logistique** : matériel et services rattachés à un événement (prix unitaire, quantité, réservé ou non).
+- 📊 **Statistiques** : par événement et globales (participants par tâche, taux de réservation, coût de la logistique réservée).
+- 🖥️ **Dashboard web** aux couleurs de la FST, servi directement par l'application.
+- ⏱️ **Tâche planifiée** (`@Scheduled`) qui recalcule régulièrement le coût des événements.
+- 🧭 **Aspect AOP** (`PerformanceAspect`) qui journalise le temps d'exécution de chaque méthode des services.
 
-## Dashboard
+---
 
-Une fois l'application lancée : **<http://localhost:8089/events/>**
+## 📊 Dashboard
+
+Une fois l'application lancée : 👉 **<http://localhost:8089/events/>**
 
 <p align="center">
   <img src="docs/dashboard.png" alt="Aperçu du dashboard" width="900">
@@ -66,7 +125,7 @@ Une fois l'application lancée : **<http://localhost:8089/events/>**
 | Participants et logistique | Listes filtrables, changement de tâche directement dans le tableau |
 | Bouton « Ajouter » | Création d'un événement (avec ses participants), d'un participant ou d'une logistique |
 
-> Le dashboard est une page statique (`src/main/resources/static/index.html`) qui consomme l'API REST. Chart.js est embarqué dans le projet, le dashboard fonctionne donc **sans connexion internet**.
+> 💡 Le dashboard est une page statique (`src/main/resources/static/index.html`) qui consomme l'API REST. Chart.js est embarqué dans le projet, le dashboard fonctionne donc **sans connexion internet**.
 
 **Données de démonstration** : au premier démarrage, si la base est vide, 6 événements, 12 participants et leur logistique sont insérés automatiquement (`DemoDataLoader`). Pour désactiver ce comportement :
 
@@ -75,20 +134,27 @@ Une fois l'application lancée : **<http://localhost:8089/events/>**
 app.demo-data=false
 ```
 
-## Stack technique
+---
+
+## 🧰 Stack technique
 
 | Couche | Technologies |
 |---|---|
-| Langage | Java 8+ (bytecode cible 8; JDK 17 recommandé) |
+| Langage | Java 8+ (bytecode cible 8 ; JDK 17 recommandé) |
 | Framework | Spring Boot 2.7.18 (Web, Data JPA, AOP, Scheduling, Actuator) |
 | Persistance | Hibernate / JPA · MySQL 8 (application) · H2 en mémoire (tests) |
 | Productivité | Lombok 1.18.46 |
 | Tests | JUnit 4 & 5 · Mockito · MockMvc · Spring Boot Test |
-| Qualité | JaCoCo 0.8.15 (couverture de code) |
+| Qualité | JaCoCo 0.8.15 (couverture de code) · SonarQube |
 | Front | HTML / CSS / JavaScript · Chart.js 4.4.1 |
 | Build | Maven (wrapper `mvnw` inclus) |
+| CI/CD et sécurité | Jenkins Multibranch · Gitleaks · Trivy · OWASP ZAP · Nexus · Docker |
+| Cloud et GitOps | Amazon ECR · Amazon EKS · Argo CD · Helm · Terraform · Ansible |
+| Supervision | Prometheus · Alertmanager · Grafana · Slack |
 
-## Architecture
+---
+
+## 🏗️ Architecture applicative
 
 Architecture en couches classique **Controller → Service → Repository → Base de données**.
 
@@ -109,7 +175,11 @@ flowchart LR
     R --> DB[("MySQL<br/>eventsProject")]
 ```
 
-## Modèle de données
+> L'architecture DevOps de bout en bout (GitHub, Jenkins, ECR, Argo CD, EKS, supervision) est le schéma animé en tête de ce README ; une version statique est disponible dans [docs/architecture.png](docs/architecture.png).
+
+---
+
+## 🗃️ Modèle de données
 
 ```mermaid
 classDiagram
@@ -149,7 +219,9 @@ classDiagram
 - `Event → Logistics` est une relation `OneToMany` unidirectionnelle, chargée en `EAGER`.
 - Le coût d'un événement = somme de `prixUnit × quantite` des logistiques **réservées**.
 
-## Démarrage rapide
+---
+
+## 🚀 Démarrage rapide
 
 ### Prérequis
 
@@ -174,7 +246,7 @@ spring.datasource.username=root
 spring.datasource.password=
 ```
 
-> Pour lancer MySQL rapidement avec Docker :
+> 🐳 Pour lancer MySQL rapidement avec Docker :
 > ```bash
 > docker run -d --name mysql-events -p 3306:3306 -e MYSQL_ALLOW_EMPTY_PASSWORD=yes mysql:8
 > ```
@@ -188,8 +260,8 @@ mvn spring-boot:run
 
 | Ressource | URL |
 |---|---|
-| Dashboard | <http://localhost:8089/events/> |
-| Base de l'API | `http://localhost:8089/events` |
+| 🖥️ Dashboard | <http://localhost:8089/events/> |
+| 🔌 Base de l'API | `http://localhost:8089/events` |
 
 ### 4. Construire le JAR
 
@@ -198,11 +270,13 @@ mvn clean package
 java -jar target/eventsProject-1.0.0-SNAPSHOT.jar
 ```
 
-## API REST
+---
+
+## 🔌 API REST
 
 Toutes les routes sont préfixées par le context-path **`/events`** (ex. `http://localhost:8089/events/participant/all`).
 
-### Statistiques — `/event-stats`
+### 📊 Statistiques — `/event-stats`
 
 | Méthode | Route | Description |
 |---|---|---|
@@ -248,7 +322,7 @@ Toutes les routes sont préfixées par le context-path **`/events`** (ex. `http:
 ```
 </details>
 
-### Événements — `/event`
+### 📅 Événements — `/event`
 
 | Méthode | Route | Description |
 |---|---|---|
@@ -258,7 +332,7 @@ Toutes les routes sont préfixées par le context-path **`/events`** (ex. `http:
 | `PUT` | `/event/addAffectLog/{description}` | Ajouter une logistique à l'événement portant cette description |
 | `GET` | `/event/getLogs/{d1}/{d2}` | Logistiques réservées des événements entre deux dates |
 
-### Participants — `/participant`
+### 👥 Participants — `/participant`
 
 | Méthode | Route | Description |
 |---|---|---|
@@ -269,7 +343,7 @@ Toutes les routes sont préfixées par le context-path **`/events`** (ex. `http:
 | `PUT` | `/participant/{id}/tache/{tache}` | Changer uniquement la tâche |
 | `DELETE` | `/participant/delete/{id}` | Supprimer un participant |
 
-### Logistique — `/logistics`
+### 📦 Logistique — `/logistics`
 
 | Méthode | Route | Description |
 |---|---|---|
@@ -281,7 +355,8 @@ Toutes les routes sont préfixées par le context-path **`/events`** (ex. `http:
 | `GET` | `/logistics/{id}/cout` | Coût total (`prixUnit × quantite`) |
 | `DELETE` | `/logistics/{id}` | Supprimer une logistique (`204`) |
 
-### Exemples `curl`
+<details>
+<summary><b>Exemples <code>curl</code></b></summary>
 
 ```bash
 # Créer un participant
@@ -302,8 +377,11 @@ curl -X PUT http://localhost:8089/events/event/addAffectLog/Hackathon \
 # Consulter les statistiques globales
 curl http://localhost:8089/events/event-stats/summary
 ```
+</details>
 
-## Tests et couverture
+---
+
+## 🧪 Tests et couverture
 
 Chaque fonctionnalité est testée de deux façons :
 
@@ -323,25 +401,52 @@ Chaque fonctionnalité est testée de deux façons :
 # Lancer tous les tests (rapport JaCoCo généré automatiquement)
 mvn clean test
 
+# Commande complète utilisée par le pipeline (73 tests)
+./mvnw -B clean verify
+
 # Lancer une seule classe de test
 mvn test -Dtest=EventStatsServiceImplMockTest
 ```
 
-Le rapport de couverture est disponible dans **`target/site/jacoco/index.html`**.
+Rapport de couverture : **`target/site/jacoco/index.html`** (HTML) · `target/site/jacoco/jacoco.xml` (XML, lu par SonarQube).
 
-> Les tests utilisent `src/test/resources/application.properties` (H2 en mémoire) : **MySQL n'est pas nécessaire pour lancer les tests**.
+> ✅ Les tests utilisent `src/test/resources/application.properties` (H2 en mémoire) : **MySQL n'est pas nécessaire pour lancer les tests**.
 
-## Pipeline CI/CD · DevSecOps · GitOps
+<details>
+<summary><b>Détail des 73 tests, classe par classe</b></summary>
 
-Le pipeline est défini dans [`Jenkinsfile`](Jenkinsfile), exécuté par un job Jenkins Multibranch. Il suit le flux **push → Jenkins → Amazon ECR → branche `gitops` de ce dépôt → Argo CD → EKS → supervision**. Jenkins construit, teste et publie; il ne déploie pas directement sur Kubernetes. Il met à jour `envs/<environnement>/` sur la branche `gitops`; Argo CD synchronise ensuite le cluster.
+Chemins relatifs à `src/test/java/tn/fst/eventsproject/`. Nombre de tests issu de `mvnw -B clean verify` :
 
-Le dépôt unique rassemble l'application à la racine et l'infrastructure dans [`platform/`](platform/). Le schéma [docs/architecture.png](docs/architecture.png) illustre le flux : GitHub déclenche Jenkins, Jenkins publie l'image ECR et le commit GitOps, Argo CD déploie sur EKS, puis Prometheus, Alertmanager et Grafana supervisent les workloads.
+| Classe et chemin | Type | Ce qui est vérifié | Tests |
+|---|---|---|---:|
+| `controllers/EventStatsControllerMockTest.java` | Unitaire, Mockito | Réponses du contrôleur pour les statistiques d'événement, plages de dates et statistiques globales. | 5 |
+| `controllers/LogisticsControllerMockTest.java` | Unitaire, Mockito | Routes CRUD logistique avec service simulé. | 4 |
+| `controllers/LogisticsControllerTest.java` | Intégration Spring/H2 | Requêtes HTTP CRUD du contrôleur logistique. | 4 |
+| `controllers/ParticipantRestControllerIntegrationTest.java` | Intégration Spring/H2 | CRUD participants, changement de tâche et réponses 404. | 6 |
+| `controllers/ParticipantRestControllerMockitoTest.java` | Unitaire Mockito (Web MVC) | Sérialisation JSON, CRUD, tâche invalide et erreurs 404. | 8 |
+| `services/EventServicesImplTest.java` | Intégration Spring/H2 | CRUD des événements avec le contexte Spring. | 4 |
+| `services/EventServicesMockTest.java` | Unitaire, Mockito | CRUD événements et cas d'identifiant absent. | 5 |
+| `services/EventStatsServiceImplIntegrationTest.java` | Intégration Spring/H2 | Calcul des statistiques événementielles et globales persistées. | 4 |
+| `services/EventStatsServiceImplMockTest.java` | Unitaire, Mockito | Statistiques, cas vides/inconnus, tri et intervalle de dates invalide. | 9 |
+| `services/LogisticsServiceImplMockTest.java` | Unitaire, Mockito | CRUD du service logistique avec repository simulé. | 4 |
+| `services/LogisticsServiceImplTest.java` | Intégration Spring/H2 | CRUD logistique avec repositories réels en mémoire. | 4 |
+| `services/ParticipantServicesImplIntegrationTest.java` | Intégration Spring/H2 | Persistance CRUD, changement de tâche et participant absent. | 7 |
+| `services/ParticipantServicesImplMockitoTest.java` | Unitaire, Mockito | CRUD participants, sauvegarde, tâches et erreurs 404. | 9 |
+| | | **Total** | **73** |
 
-<p align="center">
-  <img src="docs/architecture.png" alt="Architecture DevOps GitOps" width="950">
-</p>
+</details>
 
-### Équipe et environnements
+---
+
+## 🔁 Pipeline CI/CD · DevSecOps · GitOps
+
+Le pipeline est défini dans [`Jenkinsfile`](Jenkinsfile), exécuté par un job Jenkins Multibranch. Il suit le flux **push → Jenkins → Amazon ECR → branche `gitops` de ce dépôt → Argo CD → EKS → supervision**.
+
+> 🔑 **Principe GitOps** : Jenkins construit, teste et publie ; il **ne déploie pas directement** sur Kubernetes. Il met à jour `envs/<environnement>/` sur la branche `gitops` ; Argo CD synchronise ensuite le cluster.
+
+Le dépôt unique rassemble l'application à la racine et l'infrastructure dans [`platform/`](platform/). Le [schéma animé](docs/1793905231734.gif) en tête de ce README illustre le flux : GitHub déclenche Jenkins, Jenkins publie l'image ECR et le commit GitOps, Argo CD déploie sur EKS, puis Prometheus, Alertmanager et Grafana supervisent les workloads.
+
+### 👩‍💻 Équipe et environnements
 
 | Membre | Branche | Feature | Environnement Kubernetes |
 |---|---|---|---|
@@ -352,7 +457,7 @@ Le dépôt unique rassemble l'application à la racine et l'infrastructure dans 
 | Nour Mustapha | `feature/event` | Événements | `events-event` |
 | Emna Ouarteni | `feature/feedback` | Avis et notes | `events-feedback` |
 
-### Branches et flux de déploiement
+### 🌿 Branches et flux de déploiement
 
 ```mermaid
 flowchart LR
@@ -374,45 +479,59 @@ flowchart LR
 |---|---|---|---|
 | `main` | Application + `platform/`. Source de l'application racine Argo CD (`platform/gitops/platform/apps`) et du chart Helm. | Oui | `events-prod` après approbation manuelle |
 | `develop` | Intégration des features. | Oui | `events-staging` |
-| `feature/*` | Une fonctionnalité par membre; fusion dans `develop` par Pull Request (PR = CI sans déploiement). | Oui | `events-<feature>` (environnement éphémère) |
+| `feature/*` | Une fonctionnalité par membre ; fusion dans `develop` par Pull Request (PR = CI sans déploiement). | Oui | `events-<feature>` (environnement éphémère) |
 | `release/*`, `hotfix/*` | Stabilisation d'une version / correctif urgent vers `main`. | Oui (Trivy et ZAP stricts sur `release/*` seulement) | `events-staging` |
 | `gitops` | Orpheline : uniquement `envs/<env>/{config.json,values.yaml}` et un README. | **Non** (exclue du Multibranch) | Lue par Argo CD |
 
-**Pourquoi `gitops` est séparée.** Jenkins pousse un commit à chaque déploiement. Sur `main` ou `develop`, ce commit déclencherait le webhook, donc un nouveau build, qui pousserait à nouveau : une boucle infinie, plus un historique applicatif pollué par des commits de déploiement. Sur une branche orpheline sans Jenkinsfile et exclue du job Multibranch (`excludes('gitops')`), le commit de promotion ne déclenche rien côté Jenkins; seul Argo CD le lit. Le chart reste versionné avec le code sur `main`, l'état des environnements est versionné à part : un retour arrière de déploiement est un simple `git revert` sur `gitops`.
+> ❓ **Pourquoi `gitops` est séparée.** Jenkins pousse un commit à chaque déploiement. Sur `main` ou `develop`, ce commit déclencherait le webhook, donc un nouveau build, qui pousserait à nouveau : une boucle infinie, plus un historique applicatif pollué par des commits de déploiement. Sur une branche orpheline sans Jenkinsfile et exclue du job Multibranch (`excludes('gitops')`), le commit de promotion ne déclenche rien côté Jenkins ; seul Argo CD le lit. Le chart reste versionné avec le code sur `main`, l'état des environnements est versionné à part : un retour arrière de déploiement est un simple `git revert` sur `gitops`.
 
-### Les 17 étapes
+### 🧱 Les 17 étapes
+
+```mermaid
+flowchart LR
+    S0["0 · Webhook"] --> S1["1 · Contexte<br/>GitFlow"] --> S2["2 · Build<br/>Maven"] --> S3["3 · Tests<br/>JaCoCo"]
+    S3 --> S4a["4a · Gitleaks"] & S4b["4b · Trivy FS"]
+    S4a & S4b --> S5["5 · SonarQube"] --> S6["6 · Quality<br/>Gate"] --> S7["7 · Nexus"] --> S8["8 · Image<br/>Docker"] --> S9["9 · Trivy<br/>image"] --> S10["10 · ECR"]
+    S10 --> S11["11 · Approbation<br/>(main)"] --> S12["12 · Promotion<br/>GitOps"] --> S13["13 · Sync<br/>Argo CD"]
+    S13 --> S14a["14a · Actuator"] & S14b["14b · ZAP"]
+    S14a & S14b --> S15["15 · Slack"]
+    S13 -.-> S16["16 · Supervision<br/>continue"]
+```
 
 Les numéros sont ceux du rapport de projet : l'étape 0 est le déclenchement webhook, les contrôles 4a/4b et 14a/14b sont parallèles, et l'étape 16 est la supervision continue. Les numéros de ligne ci-dessous pointent vers le stage Jenkins ou le bloc `post` qui l'implémente.
 
 | Nº | Stage Jenkins | Outil(s) | Traitement | Produit | Bloquant ? | Jenkinsfile |
 |---:|---|---|---|---|---|---:|
-| 0 | Déclenchement (hors stage) | GitHub, Jenkins Multibranch | Webhook push/PR et découverte de branche. | Exécution Jenkins | Déclencheur | `platform/ansible/roles/github_webhook/`; JCasC |
-| 1 | `Contexte & garde GitFlow` | Groovy, Git | Valide branche/PR; déduit owner, environnement, version et sévérité. Si déploiement : `ci/deploy-preflight.sh` vérifie paramètres, AWS/ECR, réseau/TLS/jeton Argo CD et la branche lue par Argo CD. | Variables de build | Oui | 46–99 |
+| 0 | Déclenchement (hors stage) | GitHub, Jenkins Multibranch | Webhook push/PR et découverte de branche. | Exécution Jenkins | Déclencheur | `platform/ansible/roles/github_webhook/` ; JCasC |
+| 1 | `Contexte & garde GitFlow` | Groovy, Git | Valide branche/PR ; déduit owner, environnement, version et sévérité. Si déploiement : `ci/deploy-preflight.sh` vérifie paramètres, AWS/ECR, réseau/TLS/jeton Argo CD et la branche lue par Argo CD. | Variables de build | Oui | 46–99 |
 | 2 | `Build Maven` | Maven, JDK 17 | Définit la version de branche et compile. | Classes compilées | Oui | 102–108 |
 | 3 | `Tests & couverture` | JUnit, Mockito, H2, JaCoCo | Lance les tests, construit le JAR testé et publie les rapports. | JAR + rapports tests/couverture | Oui | 110–123 |
-| 4 | `Sécurité du code` (sous-stages parallèles) | Gitleaks, Trivy FS | Scanne l'historique et analyse les dépendances/IaC. | Rapport Gitleaks masqué, `trivy-fs.txt` | Gitleaks oui; Trivy rapport | 125–149 |
+| 4 | `Sécurité du code` (sous-stages parallèles) | Gitleaks, Trivy FS | Scanne l'historique et analyse les dépendances/IaC. | Rapport Gitleaks masqué, `trivy-fs.txt` | Gitleaks oui ; Trivy rapport | 125–149 |
 | 5 | `Analyse SonarQube` | SonarQube, JaCoCo | Analyse statique et couverture. | Résultat d'analyse | Oui | 151–164 |
 | 6 | `Quality Gate` | SonarQube, webhook | Attend le verdict Quality Gate. | Verdict | Oui | 166–173 |
 | 7 | `Publication JAR · Nexus` | Maven, Nexus | Publie le JAR validé, sauf PR. | Artefact Maven | Oui si déployé | 175–190 |
 | 8 | `Image Docker` | Docker, JRE 17 Alpine | Emballe le JAR testé dans une image non-root. | Image Docker taguée | Oui si déployé | 192–205 |
-| 9 | `Scan image · Trivy` | Trivy image | Scanne l'image avec `.trivyignore`; le mode strict bloque les CRITICAL corrigeables non acceptées. | Rapport Trivy | Rapport; strict sur `release/*`/`main` | 207–223 |
+| 9 | `Scan image · Trivy` | Trivy image | Scanne l'image avec `.trivyignore` ; le mode strict bloque les CRITICAL corrigeables non acceptées. | Rapport Trivy | Rapport ; strict sur `release/*`/`main` | 207–223 |
 | 10 | `Push image · Amazon ECR` | AWS CLI, IAM, ECR | Publie via le rôle IAM de l'EC2. | Image stockée dans ECR | Oui si déployé | 225–237 |
 | 11 | `Approbation production` | Jenkins `input` | Attend l'approbation avant promotion de `main`. | Approbation de release | Oui, `main` uniquement | 239–247 |
 | 12 | `Promotion GitOps` | Git, GitHub | `ci/gitops-promote.sh` : écrit `envs/<env>/` sur `gitops`, sans commit vide, régénère et repousse en cas de push concurrent (5 essais), vérifie le SHA sur origin. | Commit SHA de déploiement | Oui si déployé | 249–261 |
-| 13 | `Synchronisation Argo CD` | Argo CD CLI, Kubernetes | `ci/argocd-wait.sh` : révision de la source `values` = SHA poussé (ou descendant sans changement de l env), image attendue, `Synced` + `Healthy`; erreurs CLI classées, jamais masquées. | Confirmation du déploiement | Oui si déployé | 263–276 |
-| 14 | `Tests post-déploiement` (sous-stages parallèles) | curl, Actuator, OWASP ZAP | `ci/smoke-tests.sh` : codes HTTP exacts sans suivre les redirections (readiness UP, Prometheus, `/events/`, API JSON) et ZAP passif. | Résultat des sondes et rapport ZAP | Actuator oui; ZAP selon branche | 278–297 |
+| 13 | `Synchronisation Argo CD` | Argo CD CLI, Kubernetes | `ci/argocd-wait.sh` : révision de la source `values` = SHA poussé (ou descendant sans changement de l'env), image attendue, `Synced` + `Healthy` ; erreurs CLI classées, jamais masquées. | Confirmation du déploiement | Oui si déployé | 263–276 |
+| 14 | `Tests post-déploiement` (sous-stages parallèles) | curl, Actuator, OWASP ZAP | `ci/smoke-tests.sh` : codes HTTP exacts sans suivre les redirections (readiness UP, Prometheus, `/events/`, API JSON) et ZAP passif. | Résultat des sondes et rapport ZAP | Actuator oui ; ZAP selon branche | 278–297 |
 | 15 | Notification de fin (bloc `post`) | Slack | Notifie le résultat du build. | Message `#igl5-g2-ci` | Non | 300–317 |
 | 16 | Supervision continue (hors pipeline) | Prometheus, Alertmanager, Grafana | Scrape les métriques, alerte et affiche le dashboard. | Alertes et dashboards | Hors pipeline | `platform/gitops/platform/monitoring-config/` |
 
-Les chemins et lignes correspondent à ce dépôt unique; l'étape 0 est créée par `platform/ansible/roles/github_webhook/` et le job Multibranch est configuré dans `platform/ansible/roles/devops_stack/templates/jenkins-casc.yaml.j2`. Schéma du flux : [docs/pipeline-devops.png](docs/pipeline-devops.png).
+Les chemins et lignes correspondent à ce dépôt unique ; l'étape 0 est créée par `platform/ansible/roles/github_webhook/` et le job Multibranch est configuré dans `platform/ansible/roles/devops_stack/templates/jenkins-casc.yaml.j2`. Schéma du flux : [docs/pipeline-devops.png](docs/pipeline-devops.png).
 
-### Outils et configuration
+### 🧰 Outils et configuration
+
+<details>
+<summary><b>Afficher les 22 outils et leurs fichiers de configuration</b></summary>
 
 | Outil | Rôle dans le projet | Fichiers de configuration |
 |---|---|---|
-| GitHub | Dépôt unique, branches, Pull Requests, webhook de build | `Jenkinsfile`; `platform/ansible/roles/github_webhook/tasks/main.yml`; `platform/ansible/roles/devops_stack/templates/jenkins-casc.yaml.j2` |
-| GitFlow | Règles `feature/*`, `develop`, `release/*`, `main`; `gitops` dédiée à l'état de déploiement | `Jenkinsfile`, `platform/gitops/platform/apps/`, branche `gitops` |
-| Jenkins | Multibranch, pipeline, JCasC, outils et identifiants | `Jenkinsfile`; `platform/ansible/roles/devops_stack/templates/jenkins-casc.yaml.j2`; `platform/ansible/roles/devops_stack/files/jenkins/` |
+| GitHub | Dépôt unique, branches, Pull Requests, webhook de build | `Jenkinsfile` ; `platform/ansible/roles/github_webhook/tasks/main.yml` ; `platform/ansible/roles/devops_stack/templates/jenkins-casc.yaml.j2` |
+| GitFlow | Règles `feature/*`, `develop`, `release/*`, `main` ; `gitops` dédiée à l'état de déploiement | `Jenkinsfile`, `platform/gitops/platform/apps/`, branche `gitops` |
+| Jenkins | Multibranch, pipeline, JCasC, outils et identifiants | `Jenkinsfile` ; `platform/ansible/roles/devops_stack/templates/jenkins-casc.yaml.j2` ; `platform/ansible/roles/devops_stack/files/jenkins/` |
 | Maven | Compilation, tests et publication du JAR | `pom.xml`, `ci/maven-settings.xml`, `Jenkinsfile` |
 | JUnit | Tests Java automatisés | `pom.xml`, `src/test/java/` |
 | Mockito | Isolation des tests unitaires | `pom.xml`, classes `*MockTest`/`*MockitoTest` |
@@ -420,56 +539,36 @@ Les chemins et lignes correspondent à ce dépôt unique; l'étape 0 est créée
 | JaCoCo | Mesure et rapport de couverture | `pom.xml`, `Jenkinsfile`, `target/site/jacoco/` |
 | Gitleaks | Recherche de secrets dans l'historique Git | `Jenkinsfile` |
 | Trivy | Scan fichiers/IaC et image | `Jenkinsfile`, `.trivyignore` |
-| SonarQube | Analyse statique et Quality Gate | `Jenkinsfile`; `platform/ansible/roles/sonar_config/tasks/main.yml` |
-| Nexus | Dépôt de snapshots/releases Maven | `ci/maven-settings.xml`; `platform/ansible/roles/nexus_config/tasks/main.yml` |
-| Docker | Image applicative et outils du build Jenkins | `Dockerfile`; `platform/ansible/roles/devops_stack/files/jenkins/Dockerfile` |
-| Amazon ECR | Registre des images et scan à la réception | `Jenkinsfile`; `platform/terraform/ecr.tf` |
+| SonarQube | Analyse statique et Quality Gate | `Jenkinsfile` ; `platform/ansible/roles/sonar_config/tasks/main.yml` |
+| Nexus | Dépôt de snapshots/releases Maven | `ci/maven-settings.xml` ; `platform/ansible/roles/nexus_config/tasks/main.yml` |
+| Docker | Image applicative et outils du build Jenkins | `Dockerfile` ; `platform/ansible/roles/devops_stack/files/jenkins/Dockerfile` |
+| Amazon ECR | Registre des images et scan à la réception | `Jenkinsfile` ; `platform/terraform/ecr.tf` |
 | Argo CD | Synchronisation GitOps dans EKS | `platform/terraform/argocd.tf`, `platform/terraform/values/argocd.yaml.tftpl`, `platform/gitops/platform/apps/` |
 | Helm | Paramétrage des environnements de l'application | `platform/gitops/charts/events-app/` |
 | Kubernetes EKS | Hébergement des namespaces et des workloads | `platform/terraform/eks.tf`, chart Helm et applications Argo CD |
 | OWASP ZAP | DAST passif après déploiement | `Jenkinsfile` |
 | Prometheus | Collecte et règles d'alerte | `platform/gitops/platform/apps/20-monitoring.yaml`, `platform/gitops/platform/monitoring-config/prometheus-rules.yaml` |
 | Alertmanager | Routage Slack des alertes | `platform/gitops/platform/apps/20-monitoring.yaml`, `platform/terraform/argocd.tf` |
-| Grafana | Dashboard par environnement; accès via port-forward | `platform/gitops/platform/monitoring-config/grafana-dashboard-configmap.yaml`, `platform/gitops/platform/apps/20-monitoring.yaml` |
+| Grafana | Dashboard par environnement ; accès via port-forward | `platform/gitops/platform/monitoring-config/grafana-dashboard-configmap.yaml`, `platform/gitops/platform/apps/20-monitoring.yaml` |
 | Slack | Notifications Jenkins, déploiements et incidents | JCasC, `platform/gitops/platform/apps/40-events-environments.yaml`, `platform/gitops/platform/apps/20-monitoring.yaml` |
 | Terraform | Infrastructure AWS, EKS, ECR, Argo CD et passage Ansible | `platform/terraform/*.tf`, `platform/terraform/values/` |
 | Ansible | Configuration de l'EC2 et des intégrations | `platform/ansible/site.yml`, `platform/ansible/roles/` |
 
-### Webhooks et notifications
+</details>
+
+### 🔔 Webhooks et notifications
 
 | Flux | Rôle / étape | Création ou configuration |
 |---|---|---|
-| GitHub → Jenkins | Déclenchement étape 0 pour push et Pull Request | Création idempotente : `platform/ansible/roles/github_webhook/tasks/main.yml`; URL : `platform/ansible/group_vars/devops/vars.yml`; job et réception : `platform/ansible/roles/devops_stack/templates/jenkins-casc.yaml.j2` |
-| SonarQube → Jenkins | Retour Quality Gate à l'étape 6 | Création : `platform/ansible/roles/sonar_config/tasks/main.yml`; consommation : `Jenkinsfile` (`Quality Gate`) |
-| Jenkins → Slack | Résultat de build à l'étape 15, canal `#igl5-g2-ci` | `Jenkinsfile` (`notifyTeam`); credential/canal : `platform/ansible/roles/devops_stack/templates/jenkins-casc.yaml.j2` |
-| Argo CD → Slack | Événements de déploiement après l'étape 13 | Service/token : `platform/terraform/values/argocd.yaml.tftpl`; abonnements : `platform/gitops/platform/apps/40-events-environments.yaml` |
-| Alertmanager → Slack | Alertes et résolutions de supervision continue, étape 16 | Secret webhook : `platform/terraform/argocd.tf`; receiver : `platform/gitops/platform/apps/20-monitoring.yaml` |
+| GitHub → Jenkins | Déclenchement étape 0 pour push et Pull Request | Création idempotente : `platform/ansible/roles/github_webhook/tasks/main.yml` ; URL : `platform/ansible/group_vars/devops/vars.yml` ; job et réception : `platform/ansible/roles/devops_stack/templates/jenkins-casc.yaml.j2` |
+| SonarQube → Jenkins | Retour Quality Gate à l'étape 6 | Création : `platform/ansible/roles/sonar_config/tasks/main.yml` ; consommation : `Jenkinsfile` (`Quality Gate`) |
+| Jenkins → Slack | Résultat de build à l'étape 15, canal `#igl5-g2-ci` | `Jenkinsfile` (`notifyTeam`) ; credential/canal : `platform/ansible/roles/devops_stack/templates/jenkins-casc.yaml.j2` |
+| Argo CD → Slack | Événements de déploiement après l'étape 13 | Service/token : `platform/terraform/values/argocd.yaml.tftpl` ; abonnements : `platform/gitops/platform/apps/40-events-environments.yaml` |
+| Alertmanager → Slack | Alertes et résolutions de supervision continue, étape 16 | Secret webhook : `platform/terraform/argocd.tf` ; receiver : `platform/gitops/platform/apps/20-monitoring.yaml` |
 
-Les deux premiers sont des webhooks entrants. Le webhook GitHub cible `https://jenkins.<IP>.sslip.io/github-webhook/` (JSON, événements `push` et `pull_request`); le jeton Vault doit avoir les portées `repo` et `admin:repo_hook`. Jenkins et Argo CD notifient Slack via plugin/API; Alertmanager utilise un webhook Slack sortant.
+Les deux premiers sont des webhooks entrants. Le webhook GitHub cible `https://jenkins.<IP>.sslip.io/github-webhook/` (JSON, événements `push` et `pull_request`) ; le jeton Vault doit avoir les portées `repo` et `admin:repo_hook`. Jenkins et Argo CD notifient Slack via plugin/API ; Alertmanager utilise un webhook Slack sortant.
 
-### Tests et couverture
-
-Chemins relatifs à `src/test/java/tn/fst/eventsproject/`. Chaque classe et son nombre de tests (résultat de `mvnw -B clean verify`) :
-
-| Classe et chemin | Type | Ce qui est vérifié | Tests |
-|---|---|---|---:|
-| `controllers/EventStatsControllerMockTest.java` | Unitaire, Mockito | Réponses du contrôleur pour les statistiques d'événement, plages de dates et statistiques globales. | 5 |
-| `controllers/LogisticsControllerMockTest.java` | Unitaire, Mockito | Routes CRUD logistique avec service simulé. | 4 |
-| `controllers/LogisticsControllerTest.java` | Intégration Spring/H2 | Requêtes HTTP CRUD du contrôleur logistique. | 4 |
-| `controllers/ParticipantRestControllerIntegrationTest.java` | Intégration Spring/H2 | CRUD participants, changement de tâche et réponses 404. | 6 |
-| `controllers/ParticipantRestControllerMockitoTest.java` | Unitaire Mockito (Web MVC) | Sérialisation JSON, CRUD, tâche invalide et erreurs 404. | 8 |
-| `services/EventServicesImplTest.java` | Intégration Spring/H2 | CRUD des événements avec le contexte Spring. | 4 |
-| `services/EventServicesMockTest.java` | Unitaire, Mockito | CRUD événements et cas d'identifiant absent. | 5 |
-| `services/EventStatsServiceImplIntegrationTest.java` | Intégration Spring/H2 | Calcul des statistiques événementielles et globales persistées. | 4 |
-| `services/EventStatsServiceImplMockTest.java` | Unitaire, Mockito | Statistiques, cas vides/inconnus, tri et intervalle de dates invalide. | 9 |
-| `services/LogisticsServiceImplMockTest.java` | Unitaire, Mockito | CRUD du service logistique avec repository simulé. | 4 |
-| `services/LogisticsServiceImplTest.java` | Intégration Spring/H2 | CRUD logistique avec repositories réels en mémoire. | 4 |
-| `services/ParticipantServicesImplIntegrationTest.java` | Intégration Spring/H2 | Persistance CRUD, changement de tâche et participant absent. | 7 |
-| `services/ParticipantServicesImplMockitoTest.java` | Unitaire, Mockito | CRUD participants, sauvegarde, tâches et erreurs 404. | 9 |
-
-Commande complète : `./mvnw -B clean verify` (73 tests, H2 pour l'intégration). Couverture HTML : `target/site/jacoco/index.html`; XML : `target/site/jacoco/jacoco.xml`.
-
-### Lancer le pipeline sur sa feature
+### ▶️ Lancer le pipeline sur sa feature
 
 Depuis le dépôt applicatif, après avoir récupéré la branche `develop` à jour :
 
@@ -481,32 +580,39 @@ git switch -c feature/ma-feature
 git add . && git commit -m "feat: description de la feature" && git push -u origin feature/ma-feature
 ```
 
-Le guide complet (backend Terraform, secrets, AWS, Ansible, GitOps, validations et suppression d'un environnement) se trouve dans [docs/GUIDE-EXECUTION.md](docs/GUIDE-EXECUTION.md).
+📘 Le guide complet (backend Terraform, secrets, AWS, Ansible, GitOps, validations et suppression d'un environnement) se trouve dans [docs/GUIDE-EXECUTION.md](docs/GUIDE-EXECUTION.md).
 
-## Sécurité
+---
+
+## 🔐 Sécurité
 
 | Contrôle | Étape | Comportement |
 |---|---|---|
-| Gitleaks (historique complet) | 4a | Bloquant : aucun secret ne doit entrer dans Git. |
-| Trivy FS (dépendances, IaC) | 4b | Rapport `trivy-fs.txt`. |
-| SonarQube + Quality Gate | 5–6 | Bloquant. |
-| Trivy image (`--severity CRITICAL --ignore-unfixed --ignorefile .trivyignore`) | 9 | Rapport sur `feature/*`/`develop`; **bloquant** (`--exit-code 1`) sur `release/*` et `main`. |
-| OWASP ZAP (passif) | 14b | Rapport après déploiement. |
+| 🔑 Gitleaks (historique complet) | 4a | **Bloquant** : aucun secret ne doit entrer dans Git. |
+| 📦 Trivy FS (dépendances, IaC) | 4b | Rapport `trivy-fs.txt`. |
+| 🧹 SonarQube + Quality Gate | 5–6 | **Bloquant**. |
+| 🐳 Trivy image (`--severity CRITICAL --ignore-unfixed --ignorefile .trivyignore`) | 9 | Rapport sur `feature/*`/`develop` ; **bloquant** (`--exit-code 1`) sur `release/*` et `main`. |
+| 🕷️ OWASP ZAP (passif) | 14b | Rapport après déploiement. |
 
 **Dépendances corrigées** : Spring Boot 2.7.6 → 2.7.18, SnakeYAML 2.2 (CVE-2022-1471), Tomcat 9.0.121 (7 CVE critiques). Avec ces mises à jour et l'acceptation de risque ci-dessous, le scan strict de l'image renvoie le code **0**.
 
-### Acceptation de risque Trivy
+### ⚖️ Acceptation de risque Trivy
 
 Deux CVE critiques restent dans Spring Framework 5.3.31 (dernière ligne compatible Spring Boot 2.7). Leur correction exige Spring 6/7, donc Spring Boot 3+ (Java 17, migration `javax` → `jakarta`). Elles sont déclarées dans [`.trivyignore`](.trivyignore), archivé avec les rapports de chaque build :
 
 | CVE | Composant | Classe vulnérable | Pourquoi l'application n'est pas exposée | Expiration |
 |---|---|---|---|---|
-| CVE-2016-1000027 | `spring-web` 5.3.31 | `HttpInvokerServiceExporter` (désérialisation Java) | Aucune utilisation de Spring Remoting/HttpInvoker dans `src/`; API REST JSON uniquement. | 2027-03-31 |
-| CVE-2026-47884 | `spring-webmvc` 5.3.31 | `XsltView` (vues XSLT) | Aucune vue XSLT ni fichier `.xsl` dans `src/`; dashboard statique. | 2027-03-31 |
+| CVE-2016-1000027 | `spring-web` 5.3.31 | `HttpInvokerServiceExporter` (désérialisation Java) | Aucune utilisation de Spring Remoting/HttpInvoker dans `src/` ; API REST JSON uniquement. | 2027-03-31 |
+| CVE-2026-47884 | `spring-webmvc` 5.3.31 | `XsltView` (vues XSLT) | Aucune vue XSLT ni fichier `.xsl` dans `src/` ; dashboard statique. | 2027-03-31 |
 
 **Plan de correction** : migration vers Spring Boot 3 (amélioration n°1 du rapport), puis suppression des deux entrées de `.trivyignore`. Les entrées expirent le 31/03/2027 : après cette date, Trivy les signale de nouveau et le mode strict bloque `main` et `release/*`, ce qui impose une réévaluation. Si une nouvelle utilisation de ces classes apparaît dans le code, l'acceptation devient caduque.
 
-## Structure du projet
+---
+
+## 📁 Structure du projet
+
+<details>
+<summary><b>Afficher l'arborescence du dépôt</b></summary>
 
 ```
 IGL5-G2-EventsProjetcs
@@ -516,8 +622,9 @@ IGL5-G2-EventsProjetcs
 ├── .trivyignore                            # acceptation de risque Trivy (expire 2027-03-31)
 ├── ci/maven-settings.xml
 ├── docs/
+│   ├── 1793905231734.gif                  # architecture DevOps GitOps (animée)
 │   ├── dashboard.png
-│   ├── architecture.png
+│   ├── architecture.png                   # architecture DevOps GitOps (statique)
 │   ├── pipeline-devops.png
 │   ├── GUIDE-EXECUTION.md
 │   ├── RAPPORT-REALISATION.md
@@ -553,12 +660,20 @@ IGL5-G2-EventsProjetcs
         └── resources/application.properties    # H2 en mémoire pour les tests
 ```
 
-## Workflow Git
+</details>
 
-- `main` : branche stable; `develop` : intégration continue.
-- `feature/<nom>` : une branche par fonctionnalité (ex. `feature/event-statistics`), fusionnée dans `develop` via une Pull Request.
-- `release/<version>` : validation de version avant fusion dans `main`; `hotfix/<nom>` : correctif urgent destiné à `main`.
-- `gitops` : branche orpheline réservée aux fichiers de déploiement `envs/<environnement>/{config.json,values.yaml}`. Elle ne contient pas de Jenkinsfile et est exclue du Multibranch pour empêcher une boucle de builds.
+---
+
+## 🌿 Workflow Git
+
+| Branche | Rôle |
+|---|---|
+| `main` | Branche stable |
+| `develop` | Intégration continue |
+| `feature/<nom>` | Une branche par fonctionnalité (ex. `feature/event-statistics`), fusionnée dans `develop` via une Pull Request |
+| `release/<version>` | Validation de version avant fusion dans `main` |
+| `hotfix/<nom>` | Correctif urgent destiné à `main` |
+| `gitops` | Branche orpheline réservée aux fichiers de déploiement `envs/<environnement>/{config.json,values.yaml}` ; sans Jenkinsfile et exclue du Multibranch pour empêcher une boucle de builds |
 
 ```bash
 git checkout develop && git pull --ff-only origin develop
@@ -571,9 +686,19 @@ git push -u origin feature/ma-fonctionnalite
 # puis ouvrir une Pull Request vers develop
 ```
 
-Convention des messages de commit : `feat:` (nouvelle fonctionnalité), `fix:` (correction), `test:` (tests), `docs:` (documentation), `refactor:` (restructuration).
+**Convention des messages de commit** :
 
-## Dépannage
+| Préfixe | Usage |
+|---|---|
+| `feat:` | Nouvelle fonctionnalité |
+| `fix:` | Correction |
+| `test:` | Tests |
+| `docs:` | Documentation |
+| `refactor:` | Restructuration |
+
+---
+
+## 🛠️ Dépannage
 
 <details>
 <summary><b><code>cannot find symbol: variable log</code> / <code>getXxx()</code> / <code>builder()</code> à la compilation</b></summary>
@@ -602,5 +727,7 @@ Une autre instance tourne déjà. Arrêtez-la, ou changez `server.port` dans `ap
 ---
 
 <p align="center">
-  <sub>Faculté des Sciences de Tunis · Université de Tunis El Manar · IGL5 — Groupe 2</sub>
+  <img src="src/main/resources/static/img/logo-fst.jpg" alt="FST" height="50"><br>
+  <sub>Faculté des Sciences de Tunis · Université de Tunis El Manar · IGL5 — Groupe 2</sub><br>
+  <sub>Roudayna Kouka · Farah Baraket · Ahlem Mastouri · Nour Mustapha · Emna Ouarteni</sub>
 </p>
