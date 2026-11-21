@@ -42,7 +42,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/1795026425890.gif" alt="Architecture DevOps GitOps : GitHub déclenche Jenkins, Jenkins publie l'image dans Amazon ECR et le commit GitOps, Argo CD déploie sur EKS, Prometheus, Alertmanager et Grafana supervisent" width="950">
+  <img src="docs/linkedin_pipeline.gif" alt="Architecture DevOps GitOps : GitHub déclenche Jenkins, Jenkins publie l'image dans Amazon ECR et le commit GitOps, Argo CD déploie sur EKS, Prometheus, Alertmanager et Grafana supervisent" width="950">
 </p>
 
 <p align="center">
